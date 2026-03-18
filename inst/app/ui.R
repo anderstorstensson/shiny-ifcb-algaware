@@ -1,5 +1,5 @@
 ui <- bslib::page_sidebar(
-  title = "AlgAware",
+  title = paste("AlgAware", utils::packageVersion("algaware")),
   theme = bslib::bs_theme(bootswatch = "flatly", version = 5),
 
   tags$head(

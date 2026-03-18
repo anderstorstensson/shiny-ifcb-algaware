@@ -8,7 +8,7 @@ mod_gallery_ui <- function(id) {
   shiny::tagList(
     # Toolbar
     shiny::div(
-      class = "d-flex align-items-center gap-2 mb-3 p-2 bg-light rounded",
+      class = "d-flex align-items-center gap-2 mb-3 p-2 bg-light rounded toolbar-row",
 
       # Region toggle
       shiny::radioButtons(ns("region_toggle"), NULL,

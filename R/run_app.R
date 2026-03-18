@@ -10,11 +10,11 @@
 #' \dontrun{
 #'   algaware::launch_app()
 #' }
-launch_app <- function(...) {
+launch_app <- function(launch.browser = TRUE, ...) {
   app_dir <- system.file("app", package = "algaware")
   if (app_dir == "") {
     stop("Could not find app directory. Try re-installing `algaware`.",
          call. = FALSE)
   }
-  shiny::shinyAppDir(app_dir, ...)
+  shiny::runApp(app_dir, launch.browser = launch.browser, ...)
 }
