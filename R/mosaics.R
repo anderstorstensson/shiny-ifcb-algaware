@@ -1,0 +1,265 @@
+#' Create an adaptive image mosaic for a taxon
+#'
+#' Produces a mosaic image where elongated organisms (chains) are shown in
+#' single rows with fewer images, while compact organisms use a tighter grid.
+#'
+#' @param image_paths Character vector of PNG file paths.
+#' @param n_images Maximum number of images to include. Default 32.
+#' @param max_width_px Maximum mosaic width in pixels. Default 1800
+#'   (fits A4 page at 300 dpi with margins).
+#' @param target_height Base target height in pixels. Default 120.
+#' @return A \code{magick} image object.
+#' @export
+create_mosaic <- function(image_paths, n_images = 32L,
+                          max_width_px = 1800L, target_height = 120L) {
+  if (length(image_paths) == 0) {
+    stop("No images provided for mosaic", call. = FALSE)
+  }
+
+  imgs_sample <- if (length(image_paths) > n_images) {
+    sample(image_paths, n_images)
+  } else {
+    image_paths
+  }
+
+  # Read and resize to target height
+  img_list <- lapply(imgs_sample, function(p) {
+    magick::image_resize(magick::image_read(p), paste0("x", target_height))
+  })
+
+  # Compute median background color
+  median_col <- compute_median_color(img_list)
+
+  # Get dimensions
+  widths <- vapply(img_list, function(img) {
+    as.numeric(magick::image_info(img)$width)
+  }, numeric(1))
+
+  # Determine layout: compute aspect ratios to adapt grid
+  aspect_ratios <- widths / target_height
+  median_aspect <- stats::median(aspect_ratios)
+
+  # For elongated images (median aspect > 2.5), use fewer columns
+
+  tile_cols <- if (median_aspect > 4) {
+    1L
+  } else if (median_aspect > 2.5) {
+    2L
+  } else if (median_aspect > 1.5) {
+    3L
+  } else {
+    4L
+  }
+
+  # Adjust: ensure row width doesn't exceed max_width_px
+  # Sort images by width descending for better packing
+  ord <- order(widths, decreasing = TRUE)
+  img_list <- img_list[ord]
+  widths <- widths[ord]
+
+  # Build rows greedily: pack images until row width exceeds max
+  rows <- list()
+  width_rows <- list()
+  current_row <- list()
+  current_widths <- numeric(0)
+  current_width <- 0
+
+  for (i in seq_along(img_list)) {
+    gap <- if (length(current_row) > 0) 4 else 0
+    if (length(current_row) >= tile_cols ||
+        (current_width + widths[i] + gap > max_width_px && length(current_row) > 0)) {
+      rows <- c(rows, list(current_row))
+      width_rows <- c(width_rows, list(current_widths))
+      current_row <- list(img_list[[i]])
+      current_widths <- widths[i]
+      current_width <- widths[i]
+    } else {
+      current_row <- c(current_row, list(img_list[[i]]))
+      current_widths <- c(current_widths, widths[i])
+      current_width <- current_width + widths[i] + gap
+    }
+  }
+  if (length(current_row) > 0) {
+    rows <- c(rows, list(current_row))
+    width_rows <- c(width_rows, list(current_widths))
+  }
+
+  # Determine target row width (widest row, capped at max_width_px)
+  total_widths <- vapply(width_rows, function(w) {
+    sum(w) + max(0, (length(w) - 1) * 4)
+  }, numeric(1))
+  target_row_width <- min(max(total_widths), max_width_px)
+
+  # Justify each row
+  row_imgs <- mapply(
+    justify_row,
+    rows, width_rows,
+    MoreArgs = list(
+      target_row_width = target_row_width,
+      target_height = target_height,
+      bg_color = median_col
+    ),
+    SIMPLIFY = FALSE
+  )
+
+  # Stack rows vertically with a small gap
+  gap_strip <- magick::image_blank(target_row_width, 2, color = median_col)
+  parts <- list()
+  for (i in seq_along(row_imgs)) {
+    if (i > 1) parts <- c(parts, list(gap_strip))
+    parts <- c(parts, list(row_imgs[[i]]))
+  }
+
+  magick::image_append(magick::image_join(parts), stack = TRUE)
+}
+
+#' Justify a row of images to a target width
+#'
+#' @param imgs_row List of magick image objects.
+#' @param widths_row Numeric vector of image widths.
+#' @param target_row_width Target total row width in pixels.
+#' @param target_height Row height in pixels.
+#' @param bg_color Background fill color (hex string).
+#' @return A single magick image for the row.
+#' @keywords internal
+justify_row <- function(imgs_row, widths_row, target_row_width,
+                        target_height, bg_color) {
+  n <- length(imgs_row)
+  total_img_width <- sum(widths_row)
+  total_padding <- target_row_width - total_img_width
+
+  if (n == 1) {
+    left_pad <- floor(total_padding / 2)
+    right_pad <- total_padding - left_pad
+    parts <- list()
+    if (left_pad > 0) {
+      parts <- c(parts, list(
+        magick::image_blank(left_pad, target_height, color = bg_color)))
+    }
+    parts <- c(parts, list(imgs_row[[1]]))
+    if (right_pad > 0) {
+      parts <- c(parts, list(
+        magick::image_blank(right_pad, target_height, color = bg_color)))
+    }
+    return(magick::image_append(magick::image_join(parts), stack = FALSE))
+  }
+
+  if (total_padding <= 0) {
+    return(magick::image_append(magick::image_join(imgs_row), stack = FALSE))
+  }
+
+  gaps <- n - 1
+  base_pad <- floor(total_padding / gaps)
+  remainder <- total_padding - base_pad * gaps
+
+  parts <- list()
+  for (i in seq_len(n)) {
+    parts <- c(parts, list(imgs_row[[i]]))
+    if (i < n) {
+      this_pad <- base_pad + ifelse(i <= remainder, 1, 0)
+      parts <- c(parts, list(
+        magick::image_blank(this_pad, target_height, color = bg_color)))
+    }
+  }
+
+  magick::image_append(magick::image_join(parts), stack = FALSE)
+}
+
+#' Compute median pixel color across images
+#'
+#' @param img_list List of magick image objects.
+#' @return Hex color string.
+#' @keywords internal
+compute_median_color <- function(img_list) {
+  tryCatch({
+    arrays <- lapply(img_list, function(img) {
+      as.integer(magick::image_data(img, channels = "rgb"))
+    })
+    r <- unlist(lapply(arrays, function(a) a[1, , ]))
+    g <- unlist(lapply(arrays, function(a) a[2, , ]))
+    b <- unlist(lapply(arrays, function(a) a[3, , ]))
+    sprintf("#%02X%02X%02X", stats::median(r), stats::median(g), stats::median(b))
+  }, error = function(e) {
+    "#F0F0F0"
+  })
+}
+
+#' Create mosaics for top taxa in a region
+#'
+#' Extracts PNGs from .roi files and creates mosaic images for the top N taxa
+#' by biovolume.
+#'
+#' @param wide_summary Wide-format summary from \code{create_wide_summary()}.
+#' @param classifications Classification data.frame with \code{sample_name},
+#'   \code{roi_number}, \code{class_name}.
+#' @param sample_ids Character vector of sample PIDs for this region.
+#' @param raw_data_path Path to raw data (for .roi files).
+#' @param taxa_lookup Taxa lookup table.
+#' @param n_taxa Number of top taxa to create mosaics for.
+#' @param n_images Number of images per mosaic.
+#' @param temp_dir Temporary directory for extracted PNGs.
+#' @return A named list of magick image objects (names = taxon names).
+#' @export
+create_region_mosaics <- function(wide_summary, classifications, sample_ids,
+                                  raw_data_path, taxa_lookup,
+                                  n_taxa = 5L, n_images = 32L,
+                                  temp_dir = tempdir()) {
+  # Find top taxa by total biovolume
+  data_cols <- names(wide_summary)[-1]
+  if (length(data_cols) == 0) return(list())
+
+  wide_summary$total_bv <- rowSums(
+    wide_summary[, data_cols, drop = FALSE], na.rm = TRUE
+  )
+  top_taxa <- utils::head(
+    wide_summary$scientific_name[order(wide_summary$total_bv, decreasing = TRUE)],
+    n_taxa
+  )
+
+  # Map scientific names back to class names
+  mosaics <- list()
+
+  for (taxon in top_taxa) {
+    # Find class names that map to this taxon
+    matching_classes <- taxa_lookup$clean_names[taxa_lookup$name == taxon]
+
+    # Get ROIs for this taxon from the region samples
+    taxon_rois <- classifications[
+      classifications$class_name %in% matching_classes &
+      classifications$sample_name %in% sample_ids,
+    ]
+
+    if (nrow(taxon_rois) == 0) next
+
+    # Extract PNGs for these ROIs
+    png_paths <- character(0)
+    for (samp in unique(taxon_rois$sample_name)) {
+      roi_file <- list.files(raw_data_path, pattern = paste0(samp, "\\.roi$"),
+                             recursive = TRUE, full.names = TRUE)
+      if (length(roi_file) == 0) next
+
+      samp_rois <- taxon_rois$roi_number[taxon_rois$sample_name == samp]
+      out_folder <- file.path(temp_dir, "algaware_mosaics")
+
+      iRfcb::ifcb_extract_pngs(
+        roi_file[1],
+        out_folder,
+        ROInumbers = samp_rois,
+        verbose = FALSE
+      )
+
+      extracted <- list.files(
+        file.path(out_folder, samp),
+        pattern = "\\.png$",
+        full.names = TRUE
+      )
+      png_paths <- c(png_paths, extracted)
+    }
+
+    if (length(png_paths) > 0) {
+      mosaics[[taxon]] <- create_mosaic(png_paths, n_images = n_images)
+    }
+  }
+
+  mosaics
+}

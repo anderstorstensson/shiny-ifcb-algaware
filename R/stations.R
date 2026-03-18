@@ -1,0 +1,97 @@
+#' Load AlgAware station definitions
+#'
+#' @return A tibble with STATION_NAME, COAST, STATION_NAME_SHORT columns
+#' @export
+load_algaware_stations <- function() {
+  station_file <- system.file("stations", "algaware_stations.tsv",
+                              package = "algaware")
+  utils::read.delim(station_file, stringsAsFactors = FALSE)
+}
+
+#' Match dashboard metadata to AlgAware stations using spatial join
+#'
+#' Finds IFCB bins sampled near AlgAware stations by creating buffers around
+#' station centroids and performing a spatial join.
+#'
+#' @param metadata A data.frame with at least \code{latitude} and
+#'   \code{longitude} columns (from dashboard metadata).
+#' @param algaware_stations A data.frame from \code{load_algaware_stations()}.
+#' @return A tibble of metadata rows matched to stations, with
+#'   \code{STATION_NAME}, \code{COAST}, and \code{STATION_NAME_SHORT} columns
+#'   added.
+#' @export
+match_bins_to_stations <- function(metadata, algaware_stations) {
+  # Note: load_station_bundle is an internal SHARK4R function
+
+  station_bundle <- SHARK4R:::load_station_bundle(verbose = FALSE)
+
+  algaware_station_data <- station_bundle[
+    station_bundle$STATION_NAME %in% algaware_stations$STATION_NAME,
+  ]
+
+  stations_sf <- sf::st_as_sf(
+    algaware_station_data,
+    coords = c("LONGITUDE_WGS84_SWEREF99_DD", "LATITUDE_WGS84_SWEREF99_DD"),
+    crs = 4326
+  )
+  stations_sf <- sf::st_transform(stations_sf, 3006)
+
+  metadata_sf <- sf::st_as_sf(
+    metadata,
+    coords = c("longitude", "latitude"),
+    crs = 4326
+  )
+  metadata_sf <- sf::st_transform(metadata_sf, 3006)
+
+  station_buffers <- sf::st_buffer(
+    stations_sf,
+    dist = algaware_station_data$OUT_OF_BOUNDS_RADIUS
+  )
+
+  joined <- sf::st_join(
+    metadata_sf,
+    station_buffers[, "STATION_NAME"],
+    join = sf::st_within
+  )
+
+  result <- sf::st_drop_geometry(joined)
+  result <- result[!is.na(result$STATION_NAME), ]
+
+  merge(result, algaware_stations, by = "STATION_NAME", all.x = TRUE)
+}
+
+#' Group bins into station visits
+#'
+#' Handles cases where a station is visited multiple times during a cruise
+#' (days apart), and where bins at the same station span midnight.
+#'
+#' @param metadata A data.frame with \code{STATION_NAME} and
+#'   \code{sample_time} columns (POSIXct).
+#' @param max_gap_hours Maximum gap between consecutive bins to consider them
+#'   part of the same visit. Default 12 hours.
+#' @return The input data.frame with an added \code{visit_id} column
+#'   (character: \code{STATION_NAME_visitN}).
+#' @keywords internal
+assign_station_visits <- function(metadata, max_gap_hours = 12) {
+  metadata <- metadata[order(metadata$STATION_NAME, metadata$sample_time), ]
+  metadata$visit_id <- NA_character_
+
+  for (stn in unique(metadata$STATION_NAME)) {
+    idx <- which(metadata$STATION_NAME == stn)
+    times <- metadata$sample_time[idx]
+    visit_num <- 1L
+    metadata$visit_id[idx[1]] <- paste0(stn, "_visit", visit_num)
+
+    if (length(idx) > 1) {
+      for (i in 2:length(idx)) {
+        gap_hours <- as.numeric(difftime(times[i], times[i - 1], units = "hours"))
+        if (gap_hours > max_gap_hours) {
+          visit_num <- visit_num + 1L
+        }
+        metadata$visit_id[idx[i]] <- paste0(stn, "_visit", visit_num)
+      }
+    }
+  }
+
+  metadata
+}

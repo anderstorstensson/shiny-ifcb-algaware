@@ -1,0 +1,36 @@
+Package: algaware
+Title: Interactive IFCB Phytoplankton Reporting Tool
+Version: 0.1.0
+Authors@R:
+    person("Anders", "Torstensson", , "anders.torstensson@smhi.se", role = c("aut", "cre"))
+Description: A Shiny application for processing, validating, and reporting
+    phytoplankton data from Imaging FlowCytobot (IFCB) instruments. Integrates
+    with IFCB Dashboard for data retrieval, supports interactive validation of
+    classifier predictions, and generates Word reports with biomass plots,
+    heatmaps, and image mosaics.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    shiny (>= 1.8.0),
+    bslib (>= 0.6.0),
+    DBI,
+    DT,
+    RSQLite,
+    tidyr,
+    ggplot2,
+    sf,
+    rnaturalearth,
+    rnaturalearthdata,
+    magick,
+    officer,
+    jsonlite,
+    hdf5r,
+    iRfcb,
+    SHARK4R,
+    ggrepel,
+    viridis
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

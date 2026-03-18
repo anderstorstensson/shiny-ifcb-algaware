@@ -1,0 +1,57 @@
+/* AlgAware Shiny App Styles */
+
+.gallery-drag-area {
+  min-height: 300px;
+  padding: 10px;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.image-card {
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.image-card:hover {
+  border-color: #aaa !important;
+}
+
+.image-card.selected {
+  border: 3px solid #007bff !important;
+  background-color: #e7f1ff !important;
+}
+
+.selection-box-active {
+  position: fixed;
+  border: 2px dashed #007bff;
+  background: rgba(0, 123, 255, 0.1);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Sidebar styling */
+.sidebar .hr {
+  margin: 8px 0;
+}
+
+/* Compact radio buttons */
+.shiny-input-radiogroup label {
+  margin-bottom: 2px;
+}
+
+/* Toolbar */
+.toolbar-row .form-group {
+  margin-bottom: 0;
+}
+
+/* Status text */
+.status-text {
+  font-size: 12px;
+  color: #666;
+  white-space: pre-wrap;
+}
+
+/* Make selectInput smaller in toolbar */
+.toolbar-select .selectize-input {
+  min-height: 30px;
+  padding: 4px 8px;
+}
