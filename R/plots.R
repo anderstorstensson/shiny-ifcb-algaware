@@ -58,8 +58,8 @@ create_biomass_maps <- function(station_summary) {
       size = 3, min.segment.length = 0, segment.color = "gray50",
       box.padding = 0.5
     ) +
-    ggplot2::scale_color_gradient(
-      low = "lightblue", high = "darkblue",
+    ggplot2::scale_color_viridis_c(
+      option = "mako", direction = -1,
       name = expression(paste("Biomass (", mu, "g C/L)"))
     ) +
     ggplot2::ggtitle("Total carbon biomass")
@@ -80,8 +80,8 @@ create_biomass_maps <- function(station_summary) {
       size = 3, min.segment.length = 0, segment.color = "gray50",
       box.padding = 0.5
     ) +
-    ggplot2::scale_color_gradient(
-      low = "lightgreen", high = "darkgreen",
+    ggplot2::scale_color_viridis_c(
+      option = "cividis",
       name = expression(paste("Chl fluorescence (", mu, "g/L)"))
     ) +
     ggplot2::ggtitle("Chlorophyll fluorescence")
@@ -110,8 +110,8 @@ create_image_count_map <- function(image_counts) {
                    color = .data$n_images),
       size = 2.5, alpha = 0.8
     ) +
-    ggplot2::scale_color_gradient(
-      low = "orange", high = "darkred",
+    ggplot2::scale_color_viridis_c(
+      option = "plasma",
       name = "Image count"
     ) +
     ggplot2::ggtitle("IFCB image counts") +
@@ -171,7 +171,7 @@ create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "") {
   # Add asterisk to label text for HAB species
   display_labels <- ifelse(
     species_order %in% hab_species,
-    paste0(species_order, " *"),
+    paste0(species_order, "*"),
     species_order
   )
   names(display_labels) <- species_order
@@ -192,16 +192,21 @@ create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "") {
                   title = title) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
-      axis.text.x = ggplot2::element_text(hjust = 0.5, lineheight = 1.1),
+      axis.text.x = ggplot2::element_text(
+        angle = 45, hjust = 1, vjust = 1, lineheight = 0.9, size = 9
+      ),
       axis.text.y = ggplot2::element_text(
         size = 10,
         color = label_colors
       ),
-      panel.grid = ggplot2::element_blank()
+      panel.grid = ggplot2::element_blank(),
+      plot.caption = ggtext::element_markdown()
     )
 
   if (length(hab_in_plot) > 0) {
-    p <- p + ggplot2::labs(caption = "* Harmful algal bloom (HAB) species")
+    p <- p + ggplot2::labs(
+      caption = "<span style='color:red'>*</span> Potentially harmful taxon"
+    )
   }
 
   p
@@ -279,12 +284,12 @@ create_stacked_bar <- function(wide_summary, taxa_lookup = NULL,
 
   fill_colors <- c(viridis::viridis(length(top_taxa)), "grey70")
 
-  # Annotate HAB species in legend labels
+  # Annotate HAB species in legend labels with red HTML markup
   hab_species <- get_hab_species(taxa_lookup)
   legend_labels <- c(top_taxa, "Other")
   display_legend <- ifelse(
     legend_labels %in% hab_species,
-    paste0(legend_labels, " *"),
+    paste0("<span style='color:red'>", legend_labels, "*</span>"),
     legend_labels
   )
   names(fill_colors) <- legend_labels
@@ -308,12 +313,18 @@ create_stacked_bar <- function(wide_summary, taxa_lookup = NULL,
                   title = title) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
-      axis.text.x = ggplot2::element_text(hjust = 0.5, lineheight = 1.1),
-      panel.grid.major.x = ggplot2::element_blank()
+      axis.text.x = ggplot2::element_text(
+        angle = 45, hjust = 1, vjust = 1, lineheight = 0.9, size = 9
+      ),
+      panel.grid.major.x = ggplot2::element_blank(),
+      legend.text = ggtext::element_markdown(),
+      plot.caption = ggtext::element_markdown()
     )
 
   if (length(hab_in_plot) > 0) {
-    p <- p + ggplot2::labs(caption = "* Harmful algal bloom (HAB) species")
+    p <- p + ggplot2::labs(
+      caption = "<span style='color:red'>*</span> Potentially harmful taxon"
+    )
   }
 
   p

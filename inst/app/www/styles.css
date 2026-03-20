@@ -1,57 +1,445 @@
 /* AlgAware Shiny App Styles */
 
+/* ============================================================================
+   CSS Custom Properties
+   ============================================================================ */
+:root {
+  --aw-primary: #2c5f7c;
+  --aw-primary-light: #e8f0f5;
+  --aw-primary-dark: #1b3a4b;
+  --aw-accent: #007bff;
+  --aw-accent-light: #e7f1ff;
+  --aw-border: #dee2e6;
+  --aw-border-light: #e9ecef;
+  --aw-text: #333;
+  --aw-text-muted: #6c757d;
+  --aw-text-light: #999;
+  --aw-bg-subtle: #f8f9fa;
+  --aw-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --aw-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --aw-radius: 6px;
+  --aw-radius-sm: 4px;
+  --aw-transition: 0.2s ease;
+}
+
+/* ============================================================================
+   Gallery
+   ============================================================================ */
 .gallery-drag-area {
   min-height: 300px;
-  padding: 10px;
-  cursor: crosshair;
+  padding: 12px;
+  cursor: default;
   user-select: none;
 }
 
+.gallery-drag-area.measure-mode {
+  cursor: crosshair;
+}
+
+/* Image cards */
 .image-card {
-  transition: border-color 0.15s, background-color 0.15s;
+  display: inline-block;
+  margin: 4px;
+  padding: 5px;
+  border: 2px solid var(--aw-border-light);
+  border-radius: var(--aw-radius);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color var(--aw-transition),
+              background-color var(--aw-transition),
+              box-shadow var(--aw-transition),
+              transform var(--aw-transition);
+  vertical-align: top;
 }
 
 .image-card:hover {
-  border-color: #aaa !important;
+  border-color: #b0c4d4 !important;
+  box-shadow: var(--aw-shadow-sm);
+  transform: translateY(-1px);
 }
 
 .image-card.selected {
-  border: 3px solid #007bff !important;
-  background-color: #e7f1ff !important;
+  border: 2px solid var(--aw-accent) !important;
+  background-color: var(--aw-accent-light) !important;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
 }
 
+.image-card img {
+  display: block;
+  max-height: 120px;
+  border-radius: var(--aw-radius-sm);
+}
+
+.image-card .image-placeholder {
+  width: 80px;
+  height: 60px;
+  background: #f0f0f0;
+  display: none;
+  line-height: 60px;
+  text-align: center;
+  font-size: 10px;
+  border-radius: var(--aw-radius-sm);
+}
+
+.image-card .image-label {
+  font-size: 10px;
+  text-align: center;
+  margin-top: 3px;
+  color: var(--aw-text-muted);
+  line-height: 1.3;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-card .image-label .confidence {
+  color: var(--aw-text-light);
+  margin-left: 3px;
+}
+
+/* Selection box */
 .selection-box-active {
   position: fixed;
-  border: 2px dashed #007bff;
-  background: rgba(0, 123, 255, 0.1);
+  border: 2px dashed var(--aw-accent);
+  background: rgba(0, 123, 255, 0.08);
   pointer-events: none;
   z-index: 1000;
+  border-radius: 2px;
 }
 
-/* Sidebar styling */
-.sidebar .hr {
-  margin: 8px 0;
+/* Measurement label */
+.measure-label {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 4px 10px;
+  border-radius: var(--aw-radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 99;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   Toolbar
+   ============================================================================ */
+.toolbar-row {
+  flex-wrap: wrap;
+  gap: 8px !important;
+  border: 1px solid var(--aw-border-light);
+  background: var(--aw-bg-subtle) !important;
+}
+
+.toolbar-row .form-group {
+  margin-bottom: 0;
+}
+
+.toolbar-row .shiny-input-radiogroup {
+  margin-bottom: 0;
+}
+
+.toolbar-row .vr {
+  opacity: 0.3;
+}
+
+/* Compact selectize/select in toolbar - remove bottom margin so they
+   vertically center with adjacent buttons */
+.toolbar-select .form-group {
+  margin-bottom: 0;
+}
+
+/* Match selectize/select height to btn-sm and fix 1px offset */
+.toolbar-select {
+  position: relative;
+  top: -2px;
+}
+
+.toolbar-select .selectize-input {
+  min-height: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.toolbar-select .form-select {
+  padding: 0.25rem 2rem 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Fixed height for class selector area so toolbar doesn't jump
+   when switching between classes with different badge/name combos */
+.toolbar-class-select {
+  min-height: 90px;
+}
+
+/* Align page info text with btn-sm height */
+.toolbar-row .page-info {
+  line-height: calc(1.5 * 0.875rem + 0.5rem + 2px);
+}
+
+/* ============================================================================
+   Sidebar
+   ============================================================================ */
+.sidebar .hr,
+.sidebar hr {
+  margin: 10px 0;
+  opacity: 0.15;
+}
+
+/* Section headers */
+.sidebar h5 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--aw-primary);
+  margin-bottom: 10px;
 }
 
 /* Compact radio buttons */
 .shiny-input-radiogroup label {
   margin-bottom: 2px;
+  font-size: 13px;
 }
 
-/* Toolbar */
-.toolbar-row .form-group {
-  margin-bottom: 0;
+/* Sidebar buttons - full width */
+.sidebar .d-grid .btn {
+  text-align: left;
+  padding: 6px 12px;
 }
 
-/* Status text */
+.sidebar .d-grid .btn .fa,
+.sidebar .d-grid .btn .fas {
+  width: 18px;
+  text-align: center;
+}
+
+/* ============================================================================
+   Status Text
+   ============================================================================ */
 .status-text {
   font-size: 12px;
-  color: #666;
+  color: var(--aw-text-muted);
   white-space: pre-wrap;
+  line-height: 1.5;
 }
 
-/* Make selectInput smaller in toolbar */
-.toolbar-select .selectize-input {
-  min-height: 30px;
+/* ============================================================================
+   Tab Content
+   ============================================================================ */
+
+/* Map/plot cards */
+.plot-card {
+  background: #fff;
+  border: 1px solid var(--aw-border-light);
+  border-radius: var(--aw-radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--aw-shadow-sm);
+}
+
+.plot-card h5 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--aw-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--aw-border-light);
+}
+
+/* Scrollable plots container */
+.plots-container {
+  overflow-y: auto;
+  max-height: 85vh;
+  padding-right: 8px;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--aw-text-muted);
+}
+
+.empty-state .fa,
+.empty-state .fas {
+  font-size: 48px;
+  color: var(--aw-border);
+  margin-bottom: 16px;
+  display: block;
+}
+
+.empty-state h4 {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--aw-text);
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  font-size: 14px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* ============================================================================
+   Badges (HAB, Non-bio)
+   ============================================================================ */
+.badge-hab {
+  background: #dc3545;
+  color: white;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  display: inline-block;
+}
+
+.badge-nonbio {
+  background: var(--aw-text-muted);
+  color: white;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: middle;
+  display: inline-block;
+}
+
+/* ============================================================================
+   Class Header
+   ============================================================================ */
+.class-header {
+  line-height: 1.5;
+}
+
+.class-header .sci-name {
+  font-size: 11px;
+  color: #17a2b8;
+  font-style: italic;
+}
+
+.class-header .class-meta {
+  font-size: 11px;
+  color: var(--aw-text-muted);
+}
+
+/* ============================================================================
+   Validation Status
+   ============================================================================ */
+.validation-status {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.validation-status p {
+  margin-bottom: 4px;
+}
+
+/* ============================================================================
+   Report Section
+   ============================================================================ */
+.report-section .btn {
+  width: 100%;
+  text-align: left;
+}
+
+.report-section .btn .fa,
+.report-section .btn .fas {
+  width: 18px;
+  text-align: center;
+}
+
+/* LLM status indicator */
+.llm-status {
+  font-size: 11px;
+  margin-bottom: 8px;
   padding: 4px 8px;
+  border-radius: var(--aw-radius-sm);
+}
+
+.llm-status.available {
+  color: #198754;
+  background: #d1e7dd;
+}
+
+.llm-status.unavailable {
+  color: var(--aw-text-muted);
+  background: var(--aw-bg-subtle);
+}
+
+/* ============================================================================
+   Navbar
+   ============================================================================ */
+.navbar .navbar-logo {
+  margin-left: auto;
+  height: 30px;
+}
+
+/* ============================================================================
+   DataTable Enhancements
+   ============================================================================ */
+.dataTables_wrapper {
+  font-size: 13px;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+  border-radius: var(--aw-radius-sm);
+  border: 1px solid var(--aw-border);
+  padding: 4px 8px;
+}
+
+/* ============================================================================
+   Page Info
+   ============================================================================ */
+.page-info {
+  font-size: 12px;
+  min-width: 60px;
+  text-align: center;
+  color: var(--aw-text-muted);
+  padding-top: 8px;
+}
+
+/* ============================================================================
+   Responsive Adjustments
+   ============================================================================ */
+@media (max-width: 1200px) {
+  .toolbar-row {
+    min-height: auto !important;
+  }
+}
+
+/* ============================================================================
+   Notification Overrides
+   ============================================================================ */
+.shiny-notification {
+  border-radius: var(--aw-radius);
+  box-shadow: var(--aw-shadow-md);
+}
+
+/* ============================================================================
+   Modal Improvements
+   ============================================================================ */
+.modal-header {
+  border-bottom-color: var(--aw-border-light);
+}
+
+.modal-footer {
+  border-top-color: var(--aw-border-light);
+}
+
+/* Settings modal sections */
+.modal-body h5 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--aw-primary);
+  margin-top: 4px;
+  margin-bottom: 10px;
 }

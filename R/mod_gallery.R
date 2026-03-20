@@ -9,26 +9,23 @@ mod_gallery_ui <- function(id) {
     # Toolbar
     shiny::div(
       class = "d-flex align-items-start gap-2 mb-3 p-2 bg-light rounded toolbar-row",
-      style = "min-height: 110px;",
 
       # Region toggle
-      shiny::div(
-        style = "margin-top: 6px;",
-        shiny::radioButtons(ns("region_toggle"), NULL,
-                            choices = c("Baltic Sea" = "EAST",
-                                        "West Coast" = "WEST"),
-                            selected = "EAST", inline = FALSE)
-      ),
+      shiny::radioButtons(ns("region_toggle"), NULL,
+                          choices = c("Baltic Sea" = "EAST",
+                                      "West Coast" = "WEST"),
+                          selected = "EAST", inline = FALSE),
 
-      shiny::div(class = "vr mx-2", style = "align-self: stretch;"),
+      shiny::div(class = "vr mx-1", style = "align-self: stretch;"),
 
       # Class navigation
       shiny::actionButton(ns("prev_class"), "",
                           icon = shiny::icon("arrow-left"),
                           class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px; position: relative; z-index: 10;"),
+                          style = "position: relative; z-index: 10;"),
       shiny::div(
-        style = "width: 390px; min-width: 390px; max-width: 390px; text-align: center; height: 95px; overflow: visible; position: relative;",
+        class = "toolbar-select toolbar-class-select",
+        style = "width: 390px; min-width: 390px; max-width: 390px; text-align: center;",
         shiny::selectizeInput(ns("class_select"), NULL, choices = NULL,
                               width = "100%",
                               options = list(
@@ -41,41 +38,39 @@ mod_gallery_ui <- function(id) {
       shiny::actionButton(ns("next_class"), "",
                           icon = shiny::icon("arrow-right"),
                           class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px; position: relative; z-index: 10;"),
+                          style = "position: relative; z-index: 10;"),
 
-      shiny::div(class = "vr mx-2", style = "align-self: stretch;"),
+      shiny::div(class = "vr mx-1", style = "align-self: stretch;"),
 
       # Selection buttons
       shiny::actionButton(ns("select_page"), "Select Page",
-                          class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px;"),
+                          class = "btn-outline-secondary btn-sm"),
       shiny::actionButton(ns("deselect"), "Deselect",
-                          class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px;"),
+                          class = "btn-outline-secondary btn-sm"),
 
       # Measure tool
       shiny::actionButton(ns("measure_toggle"), label = shiny::icon("ruler"),
                           class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px;",
                           title = "Measure: click and drag on images"),
 
-      shiny::div(class = "vr mx-2", style = "align-self: stretch;"),
+      shiny::div(class = "vr mx-1", style = "align-self: stretch;"),
 
       # Page size
-      shiny::selectInput(ns("page_size"), NULL,
-                         choices = c("50", "100", "200"),
-                         selected = "100", width = "80px"),
+      shiny::div(
+        class = "toolbar-select",
+        shiny::selectInput(ns("page_size"), NULL,
+                           choices = c("50", "100", "200"),
+                           selected = "100", width = "80px")
+      ),
 
       # Pagination
       shiny::actionButton(ns("prev_page"), "",
                           icon = shiny::icon("chevron-left"),
-                          class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px;"),
+                          class = "btn-outline-secondary btn-sm"),
       shiny::uiOutput(ns("page_info"), inline = TRUE),
       shiny::actionButton(ns("next_page"), "",
                           icon = shiny::icon("chevron-right"),
-                          class = "btn-outline-secondary btn-sm",
-                          style = "margin-top: 6px;")
+                          class = "btn-outline-secondary btn-sm")
     ),
 
     # Gallery area
@@ -90,6 +85,46 @@ mod_gallery_ui <- function(id) {
   )
 }
 
+#' Extract missing PNGs for gallery display
+#'
+#' Checks which ROIs are already extracted and only extracts missing ones.
+#'
+#' @param imgs Data.frame with sample_name and roi_number columns.
+#' @param raw_dir Path to raw data directory.
+#' @param png_dir Path to PNG output directory.
+#' @return Invisible NULL.
+#' @keywords internal
+extract_gallery_pngs <- function(imgs, raw_dir, png_dir) {
+  for (samp in unique(imgs$sample_name)) {
+    samp_dir <- file.path(png_dir, samp)
+    samp_rois <- imgs$roi_number[imgs$sample_name == samp]
+
+    expected_pngs <- paste0(samp, "_",
+                            sprintf("%05d", samp_rois), ".png")
+    existing_pngs <- if (dir.exists(samp_dir)) {
+      list.files(samp_dir)
+    } else {
+      character(0)
+    }
+    missing_rois <- samp_rois[!expected_pngs %in% existing_pngs]
+
+    if (length(missing_rois) == 0) next
+
+    roi_file <- list.files(raw_dir,
+                           pattern = paste0(samp, "\\.roi$"),
+                           recursive = TRUE, full.names = TRUE)
+    if (length(roi_file) > 0) {
+      tryCatch(
+        iRfcb::ifcb_extract_pngs(roi_file[1], png_dir,
+                                   ROInumbers = missing_rois,
+                                   verbose = FALSE),
+        error = function(e) NULL
+      )
+    }
+  }
+  invisible(NULL)
+}
+
 #' Gallery Module Server
 #'
 #' @param id Module namespace ID.
@@ -101,6 +136,14 @@ mod_gallery_server <- function(id, rv, config) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
     page <- shiny::reactiveVal(1L)
+
+    # Gallery temp directory and session cleanup (H4)
+    gallery_dir <- file.path(tempdir(), "algaware_gallery", session$token)
+    resource_registered <- FALSE
+
+    session$onSessionEnded(function() {
+      unlink(gallery_dir, recursive = TRUE)
+    })
 
     # Current region's class list
     region_classes <- shiny::reactive({
@@ -145,6 +188,26 @@ mod_gallery_server <- function(id, rv, config) {
       start <- (p - 1) * ps + 1
       end <- min(p * ps, nrow(imgs))
       imgs[start:end, ]
+    })
+
+    # PNG extraction as separate reactive (H2: avoids re-extraction on
+    # selection changes since this only depends on paginated data)
+    gallery_data <- shiny::reactive({
+      imgs <- tryCatch(paginated(), error = function(e) NULL)
+      if (is.null(imgs) || nrow(imgs) == 0) return(NULL)
+
+      storage <- config$local_storage_path
+      raw_dir <- file.path(storage, "raw")
+      extract_gallery_pngs(imgs, raw_dir, gallery_dir)
+
+      # Register resource path once per session
+      if (!resource_registered) {
+        resource_name <- paste0("gallery_", session$token)
+        shiny::addResourcePath(resource_name, gallery_dir)
+        resource_registered <<- TRUE
+      }
+
+      imgs
     })
 
     # Flag to suppress selectize observer during programmatic updates
@@ -208,36 +271,18 @@ mod_gallery_server <- function(id, rv, config) {
       if (!is_non_bio) {
         show_sci <- !is.null(taxa) && !is.na(match(current_class, taxa$clean_names))
         if (show_sci) {
-          name_display <- shiny::span(
-            style = "font-size: 11px; color: #17a2b8; font-style: italic;",
-            sci_name
-          )
+          name_display <- shiny::span(class = "sci-name", sci_name)
         }
       }
 
       shiny::div(
-        if (is_hab) {
-          shiny::span(
-            style = paste0("background: #dc3545; color: white; ",
-                           "padding: 1px 6px; border-radius: 3px; ",
-                           "font-size: 10px; margin-right: 4px; ",
-                           "vertical-align: middle;"),
-            "HAB"
-          )
-        },
-        if (is_non_bio) {
-          shiny::span(
-            style = paste0("background: #6c757d; color: white; ",
-                           "padding: 1px 6px; border-radius: 3px; ",
-                           "font-size: 10px; margin-right: 4px; ",
-                           "vertical-align: middle;"),
-            "Non-biological"
-          )
-        },
+        class = "class-header",
+        if (is_hab) shiny::span(class = "badge-hab", "HAB"),
+        if (is_non_bio) shiny::span(class = "badge-nonbio", "Non-biological"),
         if (!is.null(name_display)) name_display,
         shiny::br(),
         shiny::span(
-          style = "font-size: 11px; color: #666;",
+          class = "class-meta",
           paste0("Class ", idx, " of ", length(classes),
                  " (", total_imgs, " images)")
         )
@@ -249,10 +294,7 @@ mod_gallery_server <- function(id, rv, config) {
       imgs <- current_images()
       ps <- as.integer(input$page_size)
       total_pages <- max(1, ceiling(nrow(imgs) / ps))
-      shiny::span(
-        style = "font-size: 12px; min-width: 60px; text-align: center;",
-        paste0(page(), "/", total_pages)
-      )
+      shiny::span(class = "page-info", paste0(page(), "/", total_pages))
     })
 
     # Navigation
@@ -288,7 +330,7 @@ mod_gallery_server <- function(id, rv, config) {
       if (page() < total_pages) page(page() + 1L)
     })
 
-    # Toggle image selection
+    # Toggle image selection (H3: update R state, JS handles visual toggle)
     shiny::observeEvent(input$toggle_image, {
       img_id <- input$toggle_image$img
       if (img_id %in% rv$selected_images) {
@@ -304,17 +346,20 @@ mod_gallery_server <- function(id, rv, config) {
       rv$selected_images <- union(rv$selected_images, new_imgs)
     })
 
-    # Select current page
+    # Select current page -- sync visual state to JS
     shiny::observeEvent(input$select_page, {
       imgs <- tryCatch(paginated(), error = function(e) NULL)
       if (is.null(imgs) || nrow(imgs) == 0) return()
       img_ids <- paste0(imgs$sample_name, "_", imgs$roi_number)
       rv$selected_images <- union(rv$selected_images, img_ids)
+      session$sendCustomMessage("syncSelection",
+                                list(selected = rv$selected_images))
     })
 
-    # Deselect all
+    # Deselect all -- sync visual state to JS
     shiny::observeEvent(input$deselect, {
       rv$selected_images <- character(0)
+      session$sendCustomMessage("syncSelection", list(selected = list()))
     })
 
     # Measure tool
@@ -334,9 +379,10 @@ mod_gallery_server <- function(id, rv, config) {
                                 config$pixels_per_micron)
     })
 
-    # Render gallery
+    # Render gallery (H2+H3: no longer depends on rv$selected_images;
+    # selection state is managed client-side via JS)
     output$image_gallery <- shiny::renderUI({
-      imgs <- tryCatch(paginated(), error = function(e) NULL)
+      imgs <- gallery_data()
       if (is.null(imgs) || nrow(imgs) == 0) {
         return(shiny::div(
           class = "text-center text-muted p-5",
@@ -345,44 +391,7 @@ mod_gallery_server <- function(id, rv, config) {
         ))
       }
 
-      # Extract PNGs for current page
-      storage <- config$local_storage_path
-      raw_dir <- file.path(storage, "raw")
-      png_dir <- file.path(tempdir(), "algaware_gallery",
-                           session$token)
-
-      for (samp in unique(imgs$sample_name)) {
-        samp_dir <- file.path(png_dir, samp)
-        samp_rois <- imgs$roi_number[imgs$sample_name == samp]
-
-        # Check which ROIs still need extraction
-        expected_pngs <- paste0(samp, "_",
-                                sprintf("%05d", samp_rois), ".png")
-        existing_pngs <- if (dir.exists(samp_dir)) {
-          list.files(samp_dir)
-        } else {
-          character(0)
-        }
-        missing_rois <- samp_rois[!expected_pngs %in% existing_pngs]
-
-        if (length(missing_rois) == 0) next
-
-        roi_file <- list.files(raw_dir,
-                               pattern = paste0(samp, "\\.roi$"),
-                               recursive = TRUE, full.names = TRUE)
-        if (length(roi_file) > 0) {
-          tryCatch(
-            iRfcb::ifcb_extract_pngs(roi_file[1], png_dir,
-                                     ROInumbers = missing_rois,
-                                     verbose = FALSE),
-            error = function(e) NULL
-          )
-        }
-      }
-
-      # Register resource path
       resource_name <- paste0("gallery_", session$token)
-      shiny::addResourcePath(resource_name, png_dir)
 
       # Build station name lookup from matched metadata
       station_lookup <- stats::setNames(
@@ -390,52 +399,33 @@ mod_gallery_server <- function(id, rv, config) {
         rv$matched_metadata$pid
       )
 
-      # Build image cards
+      # Build image cards (no selection dependency -- JS handles .selected)
       cards <- lapply(seq_len(nrow(imgs)), function(i) {
         row <- imgs[i, ]
         file_name <- paste0(row$sample_name, "_",
                             sprintf("%05d", row$roi_number), ".png")
         img_id <- paste0(row$sample_name, "_", row$roi_number)
-        is_selected <- img_id %in% rv$selected_images
         src <- paste0(resource_name, "/", row$sample_name, "/", file_name)
         station <- unname(station_lookup[row$sample_name])
         if (is.na(station)) station <- ""
 
-        border_style <- if (is_selected) {
-          "border: 3px solid #007bff; background-color: #e7f1ff;"
-        } else {
-          "border: 1px solid #ddd;"
-        }
-
         shiny::div(
-          class = paste("image-card", if (is_selected) "selected"),
+          class = "image-card",
           `data-img` = img_id,
-          style = paste0(
-            "display: inline-block; margin: 4px; padding: 4px; ",
-            "border-radius: 5px; cursor: pointer; ", border_style
-          ),
           shiny::tags$img(
             src = src,
-            style = "display: block; max-height: 120px;",
-            onerror = paste0(
-              "this.style.display='none';",
-              "this.nextSibling.style.display='block';"
-            )
+            alt = paste("ROI", row$roi_number, "from", row$sample_name)
           ),
           shiny::div(
-            style = paste0(
-              "width: 80px; height: 60px; background: #f0f0f0; ",
-              "display: none; line-height: 60px; text-align: center; ",
-              "font-size: 10px;"
-            ),
+            class = "image-placeholder",
             "Not found"
           ),
           shiny::div(
-            style = "font-size: 9px; text-align: center; margin-top: 2px;",
+            class = "image-label",
             station,
             if (!is.null(row$score)) {
               shiny::span(
-                style = "color: #999; margin-left: 4px;",
+                class = "confidence",
                 paste0(round(row$score * 100, 1), "%")
               )
             }

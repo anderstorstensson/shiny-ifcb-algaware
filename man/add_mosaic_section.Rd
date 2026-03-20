@@ -4,7 +4,7 @@
 \alias{add_mosaic_section}
 \title{Add mosaic section to the report}
 \usage{
-add_mosaic_section(doc, mosaics, hab_species, region_label, temp_files)
+add_mosaic_section(doc, mosaics, hab_species, region_label, cleanup)
 }
 \description{
 Add mosaic section to the report

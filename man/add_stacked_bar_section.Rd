@@ -4,14 +4,7 @@
 \alias{add_stacked_bar_section}
 \title{Add a stacked bar section to the report}
 \usage{
-add_stacked_bar_section(
-  doc,
-  wide_data,
-  taxa_lookup,
-  title,
-  fig_num,
-  temp_files
-)
+add_stacked_bar_section(doc, wide_data, taxa_lookup, title, fig_num, cleanup)
 }
 \description{
 Add a stacked bar section to the report

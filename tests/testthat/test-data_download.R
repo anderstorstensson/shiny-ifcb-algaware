@@ -64,7 +64,8 @@ test_that("download_raw_data creates dest_dir", {
 
   mockery::stub(download_raw_data, "iRfcb::ifcb_download_dashboard_data", NULL)
 
-  download_raw_data("https://example.com", c("sample1"), tmp_dir)
+  download_raw_data("https://example.com",
+                    c("D20220101T000000_IFCB134"), tmp_dir)
   expect_true(dir.exists(tmp_dir))
 })
 
@@ -74,16 +75,27 @@ test_that("download_raw_data skips existing files", {
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
   # Create an existing .roi file
-  writeLines("", file.path(tmp_dir, "sample1.roi"))
+  writeLines("", file.path(tmp_dir, "D20220101T000000_IFCB134.roi"))
 
   callback_called <- FALSE
   callback <- function(current, total, msg) {
     callback_called <<- TRUE
   }
 
-  download_raw_data("https://example.com", c("sample1"), tmp_dir,
-                     progress_callback = callback)
+  download_raw_data("https://example.com",
+                    c("D20220101T000000_IFCB134"), tmp_dir,
+                    progress_callback = callback)
   expect_true(callback_called)
+})
+
+test_that("download_raw_data rejects invalid sample IDs", {
+  tmp_dir <- file.path(tempdir(), paste0("raw_invalid_", Sys.getpid()))
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+  expect_error(
+    download_raw_data("https://example.com", c("../evil"), tmp_dir),
+    "Invalid IFCB sample IDs"
+  )
 })
 
 test_that("download_features skips existing files", {
@@ -91,15 +103,16 @@ test_that("download_features skips existing files", {
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
-  writeLines("", file.path(tmp_dir, "sample1.csv"))
+  writeLines("", file.path(tmp_dir, "D20220101T000000_IFCB134.csv"))
 
   callback_msgs <- character(0)
   callback <- function(current, total, msg) {
     callback_msgs <<- c(callback_msgs, msg)
   }
 
-  download_features("https://example.com", c("sample1"), tmp_dir,
-                     progress_callback = callback)
+  download_features("https://example.com",
+                    c("D20220101T000000_IFCB134"), tmp_dir,
+                    progress_callback = callback)
   expect_true(any(grepl("already downloaded", callback_msgs)))
 })
 

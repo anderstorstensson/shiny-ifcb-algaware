@@ -73,36 +73,14 @@ identify_diatom_classes <- function(taxa_lookup) {
   taxa_lookup$clean_names[grepl(pattern, taxa_lookup$clean_names)]
 }
 
-#' Aggregate biovolume data per station visit
+#' Compute representative visit dates
 #'
-#' Aggregates sample volumes, computes per-liter concentrations, and assigns
-#' presence categories.
+#' For each station visit, determines the most common sample date.
 #'
-#' @param biovolume_data Output from \code{summarize_biovolumes()}.
-#' @param metadata Station-matched metadata with \code{STATION_NAME},
-#'   \code{COAST}, \code{STATION_NAME_SHORT}, \code{sample_time}, and
-#'   \code{ml_analyzed} columns.
-#' @return A data.frame with per-station, per-taxon summary including
-#'   \code{counts_per_liter}, \code{biovolume_mm3_per_liter},
-#'   \code{carbon_ug_per_liter}, and \code{Presence_cat}.
-#' @export
-aggregate_station_data <- function(biovolume_data, metadata) {
-  # Join biovolume with metadata (ml_analyzed comes from biovolume_data)
-  all_data <- merge(
-    biovolume_data,
-    metadata[, c("pid", "STATION_NAME", "STATION_NAME_SHORT", "COAST",
-                 "sample_time")],
-    by.x = "sample",
-    by.y = "pid",
-    all.x = TRUE
-  )
-
-  all_data$sample_date <- as.Date(all_data$sample_time)
-
-  # Assign station visits (handles midnight crossings)
-  all_data <- assign_station_visits(all_data)
-
-  # For each visit, determine the representative date (most common)
+#' @param all_data Data.frame with visit_id, STATION_NAME, sample_date columns.
+#' @return Data.frame with visit_id, STATION_NAME, visit_date columns.
+#' @keywords internal
+compute_visit_dates <- function(all_data) {
   visit_dates <- stats::aggregate(
     sample_date ~ visit_id + STATION_NAME,
     data = all_data,
@@ -112,11 +90,17 @@ aggregate_station_data <- function(biovolume_data, metadata) {
     }
   )
   names(visit_dates)[3] <- "visit_date"
+  visit_dates
+}
 
-  all_data <- merge(all_data, visit_dates, by = c("visit_id", "STATION_NAME"),
-                    all.x = TRUE)
-
-  # Aggregate sample volume per visit
+#' Compute sample volumes per station visit
+#'
+#' @param all_data Data.frame with sample, visit_id, STATION_NAME,
+#'   ml_analyzed, sample_time columns.
+#' @return Data.frame with visit_id, STATION_NAME, total_ml_analyzed,
+#'   median_time columns.
+#' @keywords internal
+compute_sample_volumes <- function(all_data) {
   sample_meta <- unique(all_data[, c("sample", "visit_id", "STATION_NAME",
                                      "ml_analyzed", "sample_time")])
   sample_volume <- stats::aggregate(
@@ -131,40 +115,34 @@ aggregate_station_data <- function(biovolume_data, metadata) {
     FUN = stats::median
   )
   names(median_time)[3] <- "median_time"
-  sample_volume <- merge(sample_volume, median_time,
-                         by = c("visit_id", "STATION_NAME"))
+  merge(sample_volume, median_time, by = c("visit_id", "STATION_NAME"))
+}
 
-  # Aggregate biovolume per station-visit-taxon
-  agg <- stats::aggregate(
-    cbind(total_counts = counts,
-          total_biovolume_mm3 = biovolume_mm3,
-          total_carbon_ug = carbon_ug) ~
-      visit_id + STATION_NAME + STATION_NAME_SHORT + COAST + visit_date +
-      name + AphiaID,
-    data = all_data,
-    FUN = sum,
-    na.rm = TRUE
-  )
-
-  agg <- merge(agg, sample_volume, by = c("visit_id", "STATION_NAME"),
-               all.x = TRUE)
-
-  # Compute per-liter concentrations (guard against zero volume)
+#' Compute per-liter concentrations from aggregated data
+#'
+#' @param agg Data.frame with total_counts, total_biovolume_mm3,
+#'   total_carbon_ug, total_ml_analyzed columns.
+#' @return The input data.frame with added counts_per_liter,
+#'   biovolume_mm3_per_liter, carbon_ug_per_liter columns.
+#' @keywords internal
+compute_per_liter <- function(agg) {
   ml_liters <- agg$total_ml_analyzed / 1000
   ml_liters[ml_liters <= 0 | is.na(ml_liters)] <- NA_real_
   agg$counts_per_liter <- agg$total_counts / ml_liters
   agg$biovolume_mm3_per_liter <- agg$total_biovolume_mm3 / ml_liters
   agg$carbon_ug_per_liter <- agg$total_carbon_ug / ml_liters
+  agg
+}
 
-  # Join station coordinates
-  station_list <- load_shark_stations(verbose = FALSE)
-  station_coords <- station_list[, c("STATION_NAME",
-                                     "LATITUDE_WGS84_SWEREF99_DD",
-                                     "LONGITUDE_WGS84_SWEREF99_DD")]
-  station_coords <- unique(station_coords)
-  agg <- merge(agg, station_coords, by = "STATION_NAME", all.x = TRUE)
-
-  # Compute presence categories
+#' Compute presence categories based on percentage of total counts
+#'
+#' Categories: 5 = dominant (>=50%), 4 = abundant (>=10%),
+#' 3 = common (>=1%), 2 = scarce (>=0.1%), 1 = rare (>0%), 0 = absent.
+#'
+#' @param agg Data.frame with visit_id, STATION_NAME, counts_per_liter.
+#' @return The input data.frame with added pct and Presence_cat columns.
+#' @keywords internal
+compute_presence_categories <- function(agg) {
   station_totals <- stats::aggregate(
     counts_per_liter ~ visit_id + STATION_NAME,
     data = agg,
@@ -186,6 +164,64 @@ aggregate_station_data <- function(biovolume_data, metadata) {
     ifelse(agg$pct > 0, 1L, 0L)))))
 
   agg
+}
+
+#' Aggregate biovolume data per station visit
+#'
+#' Aggregates sample volumes, computes per-liter concentrations, and assigns
+#' presence categories.
+#'
+#' @param biovolume_data Output from \code{summarize_biovolumes()}.
+#' @param metadata Station-matched metadata with \code{STATION_NAME},
+#'   \code{COAST}, \code{STATION_NAME_SHORT}, \code{sample_time}, and
+#'   \code{ml_analyzed} columns.
+#' @return A data.frame with per-station, per-taxon summary including
+#'   \code{counts_per_liter}, \code{biovolume_mm3_per_liter},
+#'   \code{carbon_ug_per_liter}, and \code{Presence_cat}.
+#' @export
+aggregate_station_data <- function(biovolume_data, metadata) {
+  all_data <- merge(
+    biovolume_data,
+    metadata[, c("pid", "STATION_NAME", "STATION_NAME_SHORT", "COAST",
+                 "sample_time")],
+    by.x = "sample",
+    by.y = "pid",
+    all.x = TRUE
+  )
+
+  all_data$sample_date <- as.Date(all_data$sample_time)
+  all_data <- assign_station_visits(all_data)
+
+  visit_dates <- compute_visit_dates(all_data)
+  all_data <- merge(all_data, visit_dates, by = c("visit_id", "STATION_NAME"),
+                    all.x = TRUE)
+
+  sample_volume <- compute_sample_volumes(all_data)
+
+  agg <- stats::aggregate(
+    cbind(total_counts = counts,
+          total_biovolume_mm3 = biovolume_mm3,
+          total_carbon_ug = carbon_ug) ~
+      visit_id + STATION_NAME + STATION_NAME_SHORT + COAST + visit_date +
+      name + AphiaID,
+    data = all_data,
+    FUN = sum,
+    na.rm = TRUE
+  )
+
+  agg <- merge(agg, sample_volume, by = c("visit_id", "STATION_NAME"),
+               all.x = TRUE)
+
+  agg <- compute_per_liter(agg)
+
+  # Join station coordinates
+  station_list <- load_shark_stations(verbose = FALSE)
+  station_coords <- unique(station_list[, c("STATION_NAME",
+                                            "LATITUDE_WGS84_SWEREF99_DD",
+                                            "LONGITUDE_WGS84_SWEREF99_DD")])
+  agg <- merge(agg, station_coords, by = "STATION_NAME", all.x = TRUE)
+
+  compute_presence_categories(agg)
 }
 
 #' Collect ferrybox data for station visits

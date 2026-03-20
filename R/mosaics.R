@@ -8,10 +8,14 @@
 #' @param max_width_px Maximum mosaic width in pixels. Default 1800
 #'   (fits A4 page at 300 dpi with margins).
 #' @param target_height Base target height in pixels. Default 120.
+#' @param max_height_px Maximum mosaic height in pixels. Default 1500
+#'   (approximately half an A4 page at 300 dpi). Images are dropped to
+#'   stay within this limit.
 #' @return A \code{magick} image object.
 #' @export
 create_mosaic <- function(image_paths, n_images = 32L,
-                          max_width_px = 1800L, target_height = 120L) {
+                          max_width_px = 1800L, target_height = 120L,
+                          max_height_px = 1500L) {
   if (length(image_paths) == 0) {
     stop("No images provided for mosaic", call. = FALSE)
   }
@@ -82,6 +86,14 @@ create_mosaic <- function(image_paths, n_images = 32L,
   if (length(current_row) > 0) {
     rows <- c(rows, list(current_row))
     width_rows <- c(width_rows, list(current_widths))
+  }
+
+  # Limit rows to stay within max_height_px
+  row_height_with_gap <- target_height + 2  # 2px gap between rows
+  max_rows <- max(1L, floor(max_height_px / row_height_with_gap))
+  if (length(rows) > max_rows) {
+    rows <- rows[seq_len(max_rows)]
+    width_rows <- width_rows[seq_len(max_rows)]
   }
 
   # Determine target row width (widest row, capped at max_width_px)

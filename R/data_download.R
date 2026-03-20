@@ -1,3 +1,24 @@
+#' Validate IFCB sample IDs
+#'
+#' Checks that sample IDs match the expected IFCB format
+#' (e.g. \code{D20221023T000155_IFCB134}).
+#'
+#' @param sample_ids Character vector of sample IDs.
+#' @return Invisible TRUE if all valid; stops with an error otherwise.
+#' @keywords internal
+validate_sample_ids <- function(sample_ids) {
+  if (length(sample_ids) == 0) return(invisible(TRUE))
+  valid <- grepl("^D\\d{8}T\\d{6}_IFCB\\d+$", sample_ids)
+  if (!all(valid)) {
+    bad <- sample_ids[!valid]
+    stop("Invalid IFCB sample IDs: ",
+         paste(utils::head(bad, 5), collapse = ", "),
+         if (length(bad) > 5) "...",
+         call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
 #' Fetch metadata from the IFCB Dashboard
 #'
 #' Wraps \code{iRfcb::ifcb_download_dashboard_metadata()} and extracts
@@ -64,15 +85,18 @@ filter_metadata <- function(metadata, cruise = NULL, date_from = NULL, date_to =
 #' @export
 fetch_image_counts <- function(dashboard_url, dataset_name,
                                start_date, end_date) {
-  url <- paste0(
+  base_url <- paste0(
     sub("/$", "", dashboard_url),
-    "/api/export_metadata/", dataset_name,
-    "?start_date=", as.character(start_date),
-    "&end_date=", as.character(end_date)
+    "/api/export_metadata/",
+    utils::URLencode(dataset_name, reserved = TRUE)
   )
 
   tryCatch({
-    resp <- httr2::request(url) |>
+    resp <- httr2::request(base_url) |>
+      httr2::req_url_query(
+        start_date = as.character(start_date),
+        end_date = as.character(end_date)
+      ) |>
       httr2::req_timeout(30) |>
       httr2::req_perform()
 
@@ -110,6 +134,7 @@ fetch_image_counts <- function(dashboard_url, dataset_name,
 #' @export
 download_raw_data <- function(dashboard_url, sample_ids, dest_dir,
                               progress_callback = NULL) {
+  validate_sample_ids(sample_ids)
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   # Check which samples already exist
@@ -130,12 +155,17 @@ download_raw_data <- function(dashboard_url, sample_ids, dest_dir,
     progress_callback(0, length(needed), "Downloading raw data...")
   }
 
-  iRfcb::ifcb_download_dashboard_data(
-    dashboard_url = dashboard_url,
-    samples = needed,
-    file_types = c("roi", "adc", "hdr"),
-    dest_dir = dest_dir,
-    quiet = TRUE
+  tryCatch(
+    iRfcb::ifcb_download_dashboard_data(
+      dashboard_url = dashboard_url,
+      samples = needed,
+      file_types = c("roi", "adc", "hdr"),
+      dest_dir = dest_dir,
+      quiet = TRUE
+    ),
+    error = function(e) {
+      warning("Failed to download raw data: ", e$message, call. = FALSE)
+    }
   )
 
   if (!is.null(progress_callback)) {
@@ -156,6 +186,7 @@ download_raw_data <- function(dashboard_url, sample_ids, dest_dir,
 #' @export
 download_features <- function(dashboard_url, sample_ids, dest_dir,
                               progress_callback = NULL) {
+  validate_sample_ids(sample_ids)
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   existing <- tools::file_path_sans_ext(
@@ -175,12 +206,17 @@ download_features <- function(dashboard_url, sample_ids, dest_dir,
     progress_callback(0, length(needed), "Downloading features...")
   }
 
-  iRfcb::ifcb_download_dashboard_data(
-    dashboard_url = dashboard_url,
-    samples = needed,
-    file_types = "features",
-    dest_dir = dest_dir,
-    quiet = TRUE
+  tryCatch(
+    iRfcb::ifcb_download_dashboard_data(
+      dashboard_url = dashboard_url,
+      samples = needed,
+      file_types = "features",
+      dest_dir = dest_dir,
+      quiet = TRUE
+    ),
+    error = function(e) {
+      warning("Failed to download features: ", e$message, call. = FALSE)
+    }
   )
 
   if (!is.null(progress_callback)) {
@@ -207,6 +243,7 @@ download_features <- function(dashboard_url, sample_ids, dest_dir,
 #' @export
 copy_classification_files <- function(classification_path, sample_ids,
                                       dest_dir, progress_callback = NULL) {
+  validate_sample_ids(sample_ids)
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   # Skip samples already copied locally

@@ -4,7 +4,7 @@
 \alias{add_heatmap_section}
 \title{Add a heatmap section to the report}
 \usage{
-add_heatmap_section(doc, wide_data, taxa_lookup, title, fig_num, temp_files)
+add_heatmap_section(doc, wide_data, taxa_lookup, title, fig_num, cleanup)
 }
 \description{
 Add a heatmap section to the report

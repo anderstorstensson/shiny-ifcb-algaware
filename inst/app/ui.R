@@ -19,13 +19,7 @@ ui <- bslib::page_sidebar(
               href = "favicon-32.png"),
     tags$link(rel = "icon", type = "image/png", sizes = "16x16",
               href = "favicon-16.png"),
-    tags$script(src = "gallery.js"),
-    tags$style(HTML("
-      .navbar .navbar-logo {
-        margin-left: auto;
-        height: 30px;
-      }
-    "))
+    tags$script(src = "gallery.js")
   ),
 
   # Sidebar
@@ -69,10 +63,20 @@ ui <- bslib::page_sidebar(
       "Maps",
       icon = shiny::icon("map"),
       conditionalPanel(
+        condition = "!output.data_loaded",
+        div(class = "empty-state",
+          shiny::icon("map"),
+          h4("No map data available"),
+          p("Load data using the sidebar to view station maps.")
+        )
+      ),
+      conditionalPanel(
         condition = "output.data_loaded",
-        plotOutput("image_count_map", height = "400px"),
-        plotOutput("biomass_map", height = "400px"),
-        plotOutput("chl_map", height = "400px")
+        div(class = "plot-card", plotOutput("image_count_map",
+                                            height = "400px")),
+        div(class = "plot-card", plotOutput("biomass_map",
+                                            height = "400px")),
+        div(class = "plot-card", plotOutput("chl_map", height = "400px"))
       )
     ),
 
@@ -80,16 +84,27 @@ ui <- bslib::page_sidebar(
       "Plots",
       icon = shiny::icon("chart-bar"),
       conditionalPanel(
+        condition = "!output.data_loaded",
+        div(class = "empty-state",
+          shiny::icon("chart-bar"),
+          h4("No plot data available"),
+          p("Load data using the sidebar to view heatmaps and bar charts.")
+        )
+      ),
+      conditionalPanel(
         condition = "output.data_loaded",
         div(
-          style = "overflow-y: auto; max-height: 85vh;",
-          h4("Baltic Sea"),
-          plotOutput("baltic_heatmap", height = "800px"),
-          plotOutput("baltic_stacked_bar", height = "600px"),
-          hr(),
-          h4("West Coast"),
-          plotOutput("westcoast_heatmap", height = "800px"),
-          plotOutput("westcoast_stacked_bar", height = "600px")
+          class = "plots-container",
+          div(class = "plot-card",
+            h5("Baltic Sea"),
+            plotOutput("baltic_heatmap", height = "800px"),
+            plotOutput("baltic_stacked_bar", height = "600px")
+          ),
+          div(class = "plot-card",
+            h5("West Coast"),
+            plotOutput("westcoast_heatmap", height = "800px"),
+            plotOutput("westcoast_stacked_bar", height = "600px")
+          )
         )
       )
     ),
@@ -97,6 +112,14 @@ ui <- bslib::page_sidebar(
     bslib::nav_panel(
       "Summary",
       icon = shiny::icon("table"),
+      conditionalPanel(
+        condition = "!output.data_loaded",
+        div(class = "empty-state",
+          shiny::icon("table"),
+          h4("No summary data available"),
+          p("Load data using the sidebar to view the summary table.")
+        )
+      ),
       conditionalPanel(
         condition = "output.data_loaded",
         DT::DTOutput("summary_table")

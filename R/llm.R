@@ -18,9 +18,9 @@ NULL
 #' @return An \code{officer::fpar} object.
 #' @keywords internal
 format_report_paragraph <- function(text, taxa_lookup = NULL) {
-  normal_prop <- officer::fp_text(font.size = 11)
-  italic_prop <- officer::fp_text(font.size = 11, italic = TRUE)
-  red_prop <- officer::fp_text(font.size = 11, color = "red", bold = TRUE)
+  normal_prop <- officer::fp_text(font.size = 11, font.family = "Adobe Garamond Pro")
+  italic_prop <- officer::fp_text(font.size = 11, italic = TRUE, font.family = "Adobe Garamond Pro")
+  red_prop <- officer::fp_text(font.size = 11, color = "red", bold = TRUE, font.family = "Adobe Garamond Pro")
 
   if (is.null(taxa_lookup) || nrow(taxa_lookup) == 0) {
     return(officer::fpar(officer::ftext(text, normal_prop)))
@@ -110,11 +110,20 @@ format_report_paragraph <- function(text, taxa_lookup = NULL) {
 #' @keywords internal
 add_formatted_par <- function(doc, text, taxa_lookup = NULL,
                               style = "Normal") {
-  if (is.null(taxa_lookup)) {
-    return(officer::body_add_par(doc, text, style = style))
+  # Split on double newlines to preserve paragraph breaks from LLM output
+  paragraphs <- strsplit(text, "\n\\s*\n")[[1]]
+  paragraphs <- trimws(paragraphs)
+  paragraphs <- paragraphs[nzchar(paragraphs)]
+
+  for (para in paragraphs) {
+    if (is.null(taxa_lookup)) {
+      doc <- officer::body_add_par(doc, para, style = style)
+    } else {
+      fp <- format_report_paragraph(para, taxa_lookup)
+      doc <- officer::body_add_fpar(doc, fp, style = style)
+    }
   }
-  fp <- format_report_paragraph(text, taxa_lookup)
-  officer::body_add_fpar(doc, fp, style = style)
+  doc
 }
 
 #' Check if LLM text generation is available
@@ -367,10 +376,18 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
     "Write the Swedish summary (Sammanfattning) for this AlgAware cruise report.\n\n",
     "Cruise: ", cruise_info, "\n\n",
     "Station data overview:\n", cruise_data, "\n\n",
-    "Write 1-2 paragraphs in Swedish summarizing the key findings across all ",
-    "regions (West Coast and Baltic Sea). Follow the style described in the ",
-    "writing guide. Mark HAB species with an asterisk (*). ",
-    "Compare chlorophyll fluorescence between stations and relate it to the ",
+    "Write the summary in Swedish, using one paragraph per region ",
+    "(West Coast and Baltic Sea), clearly separated. Follow the style described in the ",
+    "writing guide. Mark potentially harmful taxa (potentiellt skadliga taxa) ",
+    "with an asterisk (*). Never use the term 'HAB species' or 'HAB-arter'; ",
+    "say 'potentiellt skadligt taxon' (singular) or 'potentiellt skadliga taxa' ",
+    "(plural) instead. Use 'potentiellt skadlig art' only when referring to a ",
+    "specific species. ",
+    "Use correct Swedish terminology: 'klorofyll' (not 'chlorophyll'), ",
+    "'klorofyllfluorescens' (not 'chlorophyll fluorescence'), ",
+    "'biovolym' (not 'biovolume'), ",
+    "'kiselalger' (not 'diatoméer' or 'diatomeer') for diatoms. ",
+    "Compare klorofyllfluorescens between stations and relate it to the ",
     "IFCB biovolume data where relevant. ",
     "Output ONLY the summary text, no headings. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
@@ -403,14 +420,16 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
     "Write the English summary (Abstract) for this AlgAware cruise report.\n\n",
     "Cruise: ", cruise_info, "\n\n",
     "Station data overview:\n", cruise_data, "\n\n",
-    "Write 1-2 paragraphs in English summarizing the key findings across all ",
-    "regions (West Coast and Baltic Sea). Follow the style described in the ",
-    "writing guide. Mark HAB species with an asterisk (*). ",
+    "Write the summary in English, using one paragraph per region ",
+    "(West Coast and Baltic Sea), clearly separated. Follow the style described in the ",
+    "writing guide. Mark potentially harmful taxa with an asterisk (*). ",
+    "Never use the term 'HAB species'; say 'potentially harmful taxon' ",
+    "(singular) or 'potentially harmful taxa' (plural) instead. ",
     "Compare chlorophyll fluorescence between stations and relate it to the ",
     "IFCB biovolume data where relevant. ",
     "Output ONLY the summary text, no headings. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
-    "The only asterisk allowed is the HAB marker directly after a species name."
+    "The only asterisk allowed is the marker directly after a species name."
   )
 
   call_openai(system_prompt, user_prompt)
@@ -460,7 +479,8 @@ generate_station_description <- function(station_data, taxa_lookup = NULL,
     context,
     "\n\nWrite 3-6 sentences in English describing the phytoplankton community ",
     "at this station. Follow the station description style in the writing guide. ",
-    "Always mention HAB species (marked [HAB]) if present, flagged with *. ",
+    "Always mention potentially harmful taxa (marked [HAB]) if present, flagged with *. ",
+    "Never use the term 'HAB species'; say 'potentially harmful taxon/taxa' instead. ",
     "Compare chlorophyll fluorescence with IFCB biovolume if chlorophyll data ",
     "is available. ",
     "Output ONLY the description text, no headings or station name. ",

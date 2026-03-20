@@ -5,17 +5,18 @@
 #' @export
 mod_report_ui <- function(id) {
   ns <- shiny::NS(id)
-  shiny::tagList(
+  shiny::div(
+    class = "report-section",
     shiny::hr(),
     shiny::h5("Report Generation"),
     shiny::uiOutput(ns("llm_status")),
     shiny::actionButton(ns("make_report"), "Make Report",
-                        class = "btn-primary",
+                        class = "btn-primary mb-1",
                         icon = shiny::icon("file-word")),
     shiny::downloadButton(ns("download_report"), "Download Report",
-                          class = "btn-outline-primary mt-2"),
+                          class = "btn-outline-primary mt-1 mb-1"),
     shiny::downloadButton(ns("download_corrections"), "Download Corrections",
-                          class = "btn-outline-secondary mt-2"),
+                          class = "btn-outline-secondary mt-1"),
     shiny::uiOutput(ns("report_status"))
   )
 }
@@ -39,14 +40,13 @@ mod_report_server <- function(id, rv, config) {
           shiny::checkboxInput(ns("use_llm"), "AI text generation",
                                value = TRUE),
           shiny::div(
-            style = "font-size: 11px; color: #198754; margin-top: -10px; margin-bottom: 6px;",
-            shiny::icon("robot"),
-            " API key detected"
+            class = "llm-status available",
+            shiny::icon("robot"), " API key detected"
           )
         )
       } else {
         shiny::div(
-          style = "font-size: 11px; color: #6c757d; margin-bottom: 6px;",
+          class = "llm-status unavailable",
           shiny::icon("pencil"),
           " Manual text mode (set OPENAI_API_KEY for AI text)"
         )

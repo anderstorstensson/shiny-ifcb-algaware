@@ -26,6 +26,24 @@ mod_validation_ui <- function(id) {
   )
 }
 
+#' Parse image IDs into sample_name and roi_number
+#'
+#' Splits composite image IDs (e.g. \code{"D20221023T000155_IFCB134_00042"})
+#' back into their sample_name and roi_number components.
+#'
+#' @param img_ids Character vector of image IDs.
+#' @return A data.frame with \code{sample_name} and \code{roi_number} columns.
+#' @keywords internal
+parse_image_ids <- function(img_ids) {
+  do.call(rbind, lapply(img_ids, function(img_id) {
+    parts <- strsplit(img_id, "_")[[1]]
+    roi_num <- as.integer(parts[length(parts)])
+    samp_name <- paste(parts[-length(parts)], collapse = "_")
+    data.frame(sample_name = samp_name, roi_number = roi_num,
+               stringsAsFactors = FALSE)
+  }))
+}
+
 #' Get the current region context for validation
 #'
 #' Resolves the current region samples, class list, index, and class name.
@@ -79,14 +97,8 @@ mod_validation_server <- function(id, rv, config) {
       if (is.null(ctx$current_class)) return()
 
       # Parse selected image IDs back to sample_name + roi_number
-      parsed <- do.call(rbind, lapply(rv$selected_images, function(img_id) {
-        # Last part after final underscore is roi_number
-        parts <- strsplit(img_id, "_")[[1]]
-        roi_num <- as.integer(parts[length(parts)])
-        samp_name <- paste(parts[-length(parts)], collapse = "_")
-        data.frame(sample_name = samp_name, roi_number = roi_num,
-                   class_name = ctx$current_class, stringsAsFactors = FALSE)
-      }))
+      parsed <- parse_image_ids(rv$selected_images)
+      parsed$class_name <- ctx$current_class
 
       # Validate class against class list before saving
       if (length(rv$class_list) > 0 &&
@@ -164,21 +176,13 @@ mod_validation_server <- function(id, rv, config) {
       shiny::req(length(rv$selected_images) > 0)
 
       # Parse selected image IDs to sample_name + roi_number
-      parsed <- do.call(rbind, lapply(rv$selected_images, function(img_id) {
-        parts <- strsplit(img_id, "_")[[1]]
-        roi_num <- as.integer(parts[length(parts)])
-        samp_name <- paste(parts[-length(parts)], collapse = "_")
-        data.frame(sample_name = samp_name, roi_number = roi_num,
-                   stringsAsFactors = FALSE)
-      }))
+      parsed <- parse_image_ids(rv$selected_images)
 
-      # Build mask for matching rows in classifications
+      # Build mask for matching rows in classifications (vectorized)
       updated <- rv$classifications
-      mask <- rep(FALSE, nrow(updated))
-      for (i in seq_len(nrow(parsed))) {
-        mask <- mask | (updated$sample_name == parsed$sample_name[i] &
-                        updated$roi_number == parsed$roi_number[i])
-      }
+      updated_keys <- paste0(updated$sample_name, "_", updated$roi_number)
+      parsed_keys <- paste0(parsed$sample_name, "_", parsed$roi_number)
+      mask <- updated_keys %in% parsed_keys
 
       n_relabeled <- sum(mask)
       if (n_relabeled == 0) {
@@ -352,7 +356,7 @@ mod_validation_server <- function(id, rv, config) {
       }
 
       shiny::div(
-        style = "font-size: 12px;",
+        class = "validation-status",
         shiny::p(shiny::strong(n_selected), " images selected"),
         if (n_corrections > 0) {
           shiny::p(

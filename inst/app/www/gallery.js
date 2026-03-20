@@ -7,6 +7,13 @@ $(document).ready(function() {
   var selectionBox = null;
 
   // ============================================================================
+  // Image error handling (delegated -- no inline onerror needed)
+  // ============================================================================
+  $(document).on('error', '.image-card img', function() {
+    $(this).hide().next('.image-placeholder').show();
+  });
+
+  // ============================================================================
   // Measure Tool
   // ============================================================================
   var measureMode = false;
@@ -21,9 +28,9 @@ $(document).ready(function() {
       removeMeasureLine();
     }
     if (measureMode) {
-      $('.gallery-drag-area').css('cursor', 'crosshair');
+      $('.gallery-drag-area').addClass('measure-mode');
     } else {
-      $('.gallery-drag-area').css('cursor', 'default');
+      $('.gallery-drag-area').removeClass('measure-mode');
     }
   });
 
@@ -127,20 +134,34 @@ $(document).ready(function() {
   });
 
   // ============================================================================
-  // Selection
+  // Selection (client-side visual state management)
   // ============================================================================
 
-  // Single-click selection on image cards
+  // Single-click selection on image cards (toggle .selected class in JS)
   $(document).on('click', '.image-card', function(e) {
     if (measureMode) return;
     if (wasDragging) {
       wasDragging = false;
       return;
     }
+    $(this).toggleClass('selected');
     var imgId = $(this).data('img');
     Shiny.setInputValue('gallery-toggle_image',
       {img: imgId, time: new Date().getTime()},
       {priority: 'event'});
+  });
+
+  // Sync selection state from server (for select-page, deselect-all)
+  Shiny.addCustomMessageHandler('syncSelection', function(msg) {
+    var selected = msg.selected || [];
+    $('.image-card').each(function() {
+      var imgId = $(this).data('img');
+      if (selected.indexOf(imgId) >= 0) {
+        $(this).addClass('selected');
+      } else {
+        $(this).removeClass('selected');
+      }
+    });
   });
 
   // Drag-select

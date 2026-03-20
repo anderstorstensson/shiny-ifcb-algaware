@@ -18,7 +18,7 @@ test_that("mod_validation_ui returns tagList", {
   expect_s3_class(ui, "shiny.tag.list")
 })
 
-test_that("mod_report_ui returns tagList", {
+test_that("mod_report_ui returns tag", {
   ui <- mod_report_ui("test")
-  expect_s3_class(ui, "shiny.tag.list")
+  expect_s3_class(ui, "shiny.tag")
 })

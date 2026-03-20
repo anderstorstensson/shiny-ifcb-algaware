@@ -7,12 +7,27 @@
 add_plot_to_doc(
   doc,
   plot,
-  temp_files,
+  cleanup,
   width,
   height,
   display_width,
   display_height
 )
+}
+\arguments{
+\item{doc}{An rdocx object.}
+
+\item{plot}{A ggplot object.}
+
+\item{cleanup}{Environment with a \code{files} character vector for
+tracking temp files.}
+
+\item{width, height}{Plot dimensions in inches for ggsave.}
+
+\item{display_width, display_height}{Display dimensions in the document.}
+}
+\value{
+The modified rdocx object.
 }
 \description{
 Save a ggplot to a temp file and add to document
