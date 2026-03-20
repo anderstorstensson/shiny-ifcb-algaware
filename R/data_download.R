@@ -145,11 +145,15 @@ download_features <- function(dashboard_url, sample_ids, dest_dir,
 
 #' Copy classification H5 files for selected bins
 #'
-#' Copies matching \code{*_class.h5} files from the classification path to
-#' local storage. Files are matched by sample name prefix.
+#' Locates \code{*_class.h5} files by constructing direct paths from sample
+#' IDs rather than listing the full directory tree. The classification path
+#' is expected to contain yearly subfolders (e.g. \code{class2024_v3}).
+#' Only the subfolder matching each sample's year is searched.
 #'
-#' @param classification_path Source directory containing .h5 files.
-#' @param sample_ids Character vector of sample PIDs.
+#' @param classification_path Source directory containing yearly subfolders
+#'   with .h5 files.
+#' @param sample_ids Character vector of sample PIDs (e.g.
+#'   \code{"D20221023T000155_IFCB134"}).
 #' @param dest_dir Destination directory.
 #' @param progress_callback Optional progress callback.
 #' @return Invisible character vector of copied file paths.
@@ -158,39 +162,62 @@ copy_classification_files <- function(classification_path, sample_ids,
                                       dest_dir, progress_callback = NULL) {
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
-  all_h5 <- list.files(classification_path, pattern = "_class.*\\.h5$",
-                       full.names = TRUE, recursive = TRUE)
-
-  # Match by sample name prefix
-  h5_basenames <- basename(all_h5)
-  h5_sample_names <- sub("_class.*\\.h5$", "", h5_basenames)
-
-  matched_idx <- which(h5_sample_names %in% sample_ids)
-  matched_files <- all_h5[matched_idx]
-
-  # Skip already copied
-  existing_h5 <- list.files(dest_dir, pattern = "\\.h5$", recursive = TRUE)
+  # Skip samples already copied locally
+  existing_h5 <- list.files(dest_dir, pattern = "\\.h5$")
   existing_samples <- sub("_class.*\\.h5$", "", existing_h5)
-  needed_idx <- which(!h5_sample_names[matched_idx] %in% existing_samples)
-  to_copy <- matched_files[needed_idx]
+  needed <- setdiff(sample_ids, existing_samples)
 
-  if (!is.null(progress_callback)) {
-    progress_callback(
-      length(matched_files) - length(to_copy),
-      length(matched_files),
-      paste0("Copying ", length(to_copy), " classification files...")
-    )
+  if (length(needed) == 0) {
+    if (!is.null(progress_callback)) {
+      progress_callback(length(sample_ids), length(sample_ids),
+                        "Classification files already copied")
+    }
+    return(invisible(character(0)))
   }
 
-  copied <- character(0)
-  for (f in to_copy) {
-    dest <- file.path(dest_dir, basename(f))
-    file.copy(f, dest, overwrite = FALSE)
-    copied <- c(copied, dest)
-  }
+  # Extract year from sample ID (format: D20221023T...)
+  sample_years <- substr(needed, 2, 5)
+
+  # Find yearly subfolders once (quick: only top-level dirs)
+  subdirs <- list.dirs(classification_path, recursive = FALSE,
+                       full.names = TRUE)
+  subdir_names <- basename(subdirs)
 
   if (!is.null(progress_callback)) {
-    progress_callback(length(matched_files), length(matched_files),
+    progress_callback(0, length(needed),
+                      paste0("Copying ", length(needed),
+                             " classification files..."))
+  }
+
+  copied <- vapply(seq_along(needed), function(i) {
+    sid <- needed[i]
+    year <- sample_years[i]
+    h5_name <- paste0(sid, "_class.h5")
+    dest <- file.path(dest_dir, h5_name)
+
+    # Find the yearly subfolder matching this sample's year
+    year_dirs <- subdirs[grepl(paste0("class", year), subdir_names)]
+
+    src <- NULL
+    for (yd in year_dirs) {
+      candidate <- file.path(yd, h5_name)
+      if (file.exists(candidate)) {
+        src <- candidate
+        break
+      }
+    }
+
+    if (!is.null(src)) {
+      file.copy(src, dest, overwrite = FALSE)
+      dest
+    } else {
+      NA_character_
+    }
+  }, character(1))
+  copied <- copied[!is.na(copied)]
+
+  if (!is.null(progress_callback)) {
+    progress_callback(length(sample_ids), length(sample_ids),
                       "Classification files ready")
   }
 
@@ -252,5 +279,35 @@ read_h5_classifications <- function(h5_dir, sample_ids = NULL) {
     })
   })
 
-  do.call(rbind, Filter(Negate(is.null), results))
+  valid_results <- Filter(Negate(is.null), results)
+  if (length(valid_results) == 0) {
+    return(data.frame(sample_name = character(0), roi_number = integer(0),
+                      class_name = character(0), score = numeric(0),
+                      stringsAsFactors = FALSE))
+  }
+  do.call(rbind, valid_results)
+}
+
+#' Read classifier name from an H5 classification file
+#'
+#' Extracts the \code{classifier_name} attribute from the first available
+#' H5 file in a directory.
+#'
+#' @param h5_dir Directory containing .h5 files.
+#' @return Character string with the classifier name, or NULL if unavailable.
+#' @export
+read_classifier_name <- function(h5_dir) {
+  h5_files <- list.files(h5_dir, pattern = "_class.*\\.h5$",
+                         full.names = TRUE, recursive = TRUE)
+  if (length(h5_files) == 0) return(NULL)
+
+  tryCatch({
+    h5 <- hdf5r::H5File$new(h5_files[1], "r")
+    on.exit(h5$close_all(), add = TRUE)
+    if (h5$exists("classifier_name")) {
+      h5[["classifier_name"]]$read()
+    } else {
+      NULL
+    }
+  }, error = function(e) NULL)
 }

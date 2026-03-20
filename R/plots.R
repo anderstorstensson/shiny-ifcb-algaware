@@ -82,7 +82,7 @@ create_biomass_maps <- function(station_summary) {
     ) +
     ggplot2::scale_color_gradient(
       low = "lightgreen", high = "darkgreen",
-      name = expression(paste("Chl (", mu, "g/L)"))
+      name = expression(paste("Chl fluorescence (", mu, "g/L)"))
     ) +
     ggplot2::ggtitle("Chlorophyll fluorescence")
 
@@ -148,7 +148,7 @@ create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "") {
   )) +
     ggplot2::geom_tile(color = "white") +
     ggplot2::scale_x_discrete(
-      labels = function(x) paste0(sub("_", " (", x), ")")
+      labels = function(x) sub("_", "\n", x)
     ) +
     ggplot2::scale_y_discrete(labels = display_labels) +
     ggplot2::scale_fill_viridis_c(option = "viridis", na.value = "grey90") +
@@ -157,7 +157,7 @@ create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "") {
                   title = title) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      axis.text.x = ggplot2::element_text(hjust = 0.5, lineheight = 1.1),
       axis.text.y = ggplot2::element_text(
         size = 10,
         color = label_colors
@@ -237,11 +237,9 @@ create_stacked_bar <- function(wide_summary, taxa_lookup = NULL,
     levels = c(top_taxa, "Other")
   )
 
-  # Labels
-  plot_data$label <- paste0(
-    sub("_", " (", as.character(plot_data$station_date)), ")"
-  )
-  label_order <- paste0(sub("_", " (", station_date_order), ")")
+  # Labels: station on first line, date on second
+  plot_data$label <- sub("_", "\n", as.character(plot_data$station_date))
+  label_order <- sub("_", "\n", station_date_order)
   plot_data$label <- factor(plot_data$label, levels = label_order)
 
   fill_colors <- c(viridis::viridis(length(top_taxa)), "grey70")
@@ -275,7 +273,7 @@ create_stacked_bar <- function(wide_summary, taxa_lookup = NULL,
                   title = title) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      axis.text.x = ggplot2::element_text(hjust = 0.5, lineheight = 1.1),
       panel.grid.major.x = ggplot2::element_blank()
     )
 

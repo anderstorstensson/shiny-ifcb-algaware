@@ -1,11 +1,31 @@
 #' Load AlgAware station definitions
 #'
-#' @return A tibble with STATION_NAME, COAST, STATION_NAME_SHORT columns
+#' Loads the bundled station list and appends any extra stations from settings.
+#'
+#' @param extra_stations A list of extra station definitions, each with
+#'   \code{STATION_NAME}, \code{COAST}, and \code{STATION_NAME_SHORT}.
+#' @return A data.frame with STATION_NAME, COAST, STATION_NAME_SHORT columns.
 #' @export
-load_algaware_stations <- function() {
+load_algaware_stations <- function(extra_stations = list()) {
   station_file <- system.file("stations", "algaware_stations.tsv",
                               package = "algaware")
-  utils::read.delim(station_file, stringsAsFactors = FALSE)
+  stations <- utils::read.delim(station_file, stringsAsFactors = FALSE)
+
+  if (length(extra_stations) > 0) {
+    extra_df <- do.call(rbind, lapply(extra_stations, function(s) {
+      data.frame(
+        STATION_NAME = s$STATION_NAME,
+        COAST = s$COAST,
+        STATION_NAME_SHORT = s$STATION_NAME_SHORT,
+        stringsAsFactors = FALSE
+      )
+    }))
+    # Avoid duplicates
+    extra_df <- extra_df[!extra_df$STATION_NAME %in% stations$STATION_NAME, ]
+    stations <- rbind(stations, extra_df)
+  }
+
+  stations
 }
 
 #' Match dashboard metadata to AlgAware stations using spatial join
@@ -23,7 +43,7 @@ load_algaware_stations <- function() {
 match_bins_to_stations <- function(metadata, algaware_stations) {
   # Note: load_station_bundle is an internal SHARK4R function
 
-  station_bundle <- SHARK4R:::load_station_bundle(verbose = FALSE)
+  station_bundle <- load_shark_stations(verbose = FALSE)
 
   algaware_station_data <- station_bundle[
     station_bundle$STATION_NAME %in% algaware_stations$STATION_NAME,
@@ -35,6 +55,12 @@ match_bins_to_stations <- function(metadata, algaware_stations) {
     crs = 4326
   )
   stations_sf <- sf::st_transform(stations_sf, 3006)
+
+  metadata <- metadata[
+    !is.na(metadata$longitude) & !is.na(metadata$latitude),
+  ]
+
+  if (nrow(metadata) == 0) return(data.frame())
 
   metadata_sf <- sf::st_as_sf(
     metadata,

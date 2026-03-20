@@ -11,7 +11,7 @@ Description: A Shiny application for processing, validating, and reporting
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Imports:
     shiny (>= 1.8.0),
     bslib (>= 0.6.0),
@@ -22,15 +22,17 @@ Imports:
     ggplot2,
     sf,
     rnaturalearth,
-    rnaturalearthdata,
     magick,
     officer,
     jsonlite,
     hdf5r,
-    iRfcb,
-    SHARK4R,
+    iRfcb (>= 0.8.1),
+    SHARK4R (>= 1.1.0),
     ggrepel,
     viridis
 Suggests:
-    testthat (>= 3.0.0)
+    mockery,
+    rnaturalearthdata,
+    testthat (>= 3.0.0),
+    withr
 Config/testthat/edition: 3

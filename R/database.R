@@ -103,19 +103,21 @@ save_annotations_db <- function(db_path, annotations, annotator = "",
   tryCatch({
     DBI::dbExecute(con, "BEGIN TRANSACTION")
 
-    # Upsert annotations
+    # Upsert annotations using prepared statement
+    stmt <- DBI::dbSendStatement(con, "
+      INSERT OR REPLACE INTO annotations
+        (sample_name, roi_number, class_name, annotator, timestamp, is_manual)
+      VALUES (?, ?, ?, ?, datetime('now'), 1)
+    ")
     for (i in seq_len(nrow(annotations))) {
-      DBI::dbExecute(con, "
-        INSERT OR REPLACE INTO annotations
-          (sample_name, roi_number, class_name, annotator, timestamp, is_manual)
-        VALUES (?, ?, ?, ?, datetime('now'), 1)
-      ", params = list(
+      DBI::dbBind(stmt, params = list(
         annotations$sample_name[i],
         as.integer(annotations$roi_number[i]),
         annotations$class_name[i],
         annotator
       ))
     }
+    DBI::dbClearResult(stmt)
 
     # Save class list per sample
     if (length(class_list) > 0) {
@@ -124,13 +126,17 @@ save_annotations_db <- function(db_path, annotations, annotator = "",
         DBI::dbExecute(con,
           "DELETE FROM class_lists WHERE sample_name = ?",
           params = list(samp))
+      }
+      cl_stmt <- DBI::dbSendStatement(con, "
+        INSERT INTO class_lists (sample_name, class_index, class_name)
+        VALUES (?, ?, ?)
+      ")
+      for (samp in samples) {
         for (j in seq_along(class_list)) {
-          DBI::dbExecute(con, "
-            INSERT INTO class_lists (sample_name, class_index, class_name)
-            VALUES (?, ?, ?)
-          ", params = list(samp, j, class_list[j]))
+          DBI::dbBind(cl_stmt, params = list(samp, j, class_list[j]))
         }
       }
+      DBI::dbClearResult(cl_stmt)
     }
 
     DBI::dbExecute(con, "COMMIT")
@@ -237,50 +243,15 @@ load_global_class_list_db <- function(db_path) {
   })
 }
 
-#' Load a class list from a text file
-#'
-#' Reads one class name per line from a \code{.txt} file.
-#'
-#' @param path Path to the class list file.
-#' @return Character vector of class names.
-#' @export
-load_class_list_file <- function(path) {
-  if (!file.exists(path)) {
-    warning("Class list file not found: ", path, call. = FALSE)
-    return(character(0))
-  }
-  classes <- readLines(path, warn = FALSE)
-  classes <- trimws(classes)
-  classes[nzchar(classes)]
-}
-
 #' Resolve the active class list
 #'
-#' Loads the class list using the following priority:
-#' 1. SQLite global_class_list table (if database exists and has entries)
-#' 2. Class list file from settings (if path is set and file exists)
-#' 3. NULL (no class list available)
+#' Loads the global class list from the SQLite database (shared with
+#' ClassiPyR). Returns NULL if the database does not exist or has no
+#' class list entries.
 #'
 #' @param db_path Path to the SQLite database file.
-#' @param class_list_path Path to a class list text file.
 #' @return Character vector of class names, or NULL.
 #' @export
-resolve_class_list <- function(db_path, class_list_path = "") {
-  # Priority 1: database
-  db_classes <- load_global_class_list_db(db_path)
-  if (!is.null(db_classes) && length(db_classes) > 0) {
-    return(db_classes)
-  }
-
-  # Priority 2: file
-  if (nzchar(class_list_path) && file.exists(class_list_path)) {
-    file_classes <- load_class_list_file(class_list_path)
-    if (length(file_classes) > 0) {
-      # Also persist to database for next time
-      save_global_class_list_db(db_path, file_classes)
-      return(file_classes)
-    }
-  }
-
-  NULL
+resolve_class_list <- function(db_path) {
+  load_global_class_list_db(db_path)
 }

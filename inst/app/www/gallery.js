@@ -6,8 +6,133 @@ $(document).ready(function() {
   var startX, startY;
   var selectionBox = null;
 
+  // ============================================================================
+  // Measure Tool
+  // ============================================================================
+  var measureMode = false;
+  var measureStart = null;
+  var measureLine = null;
+  var measureLabel = null;
+  var pixelsPerMicron = 3.4;
+
+  Shiny.addCustomMessageHandler('measureMode', function(enabled) {
+    measureMode = enabled;
+    if (!measureMode) {
+      removeMeasureLine();
+    }
+    if (measureMode) {
+      $('.gallery-drag-area').css('cursor', 'crosshair');
+    } else {
+      $('.gallery-drag-area').css('cursor', 'default');
+    }
+  });
+
+  Shiny.addCustomMessageHandler('updatePixelsPerMicron', function(value) {
+    pixelsPerMicron = value;
+  });
+
+  Shiny.addCustomMessageHandler('toggleMeasureBtn', function(msg) {
+    var btn = $('#' + msg.id);
+    if (msg.active) {
+      btn.removeClass('btn-outline-secondary').addClass('btn-primary');
+    } else {
+      btn.removeClass('btn-primary').addClass('btn-outline-secondary');
+    }
+  });
+
+  function removeMeasureLine() {
+    if (measureLine) {
+      measureLine.remove();
+      measureLine = null;
+    }
+    if (measureLabel) {
+      measureLabel.remove();
+      measureLabel = null;
+    }
+    measureStart = null;
+  }
+
+  // Measure - mousedown on image
+  $(document).on('mousedown', '.image-card img', function(e) {
+    if (!measureMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    removeMeasureLine();
+
+    var container = $('.gallery-drag-area');
+    if (container.css('position') === 'static') {
+      container.css('position', 'relative');
+    }
+    var containerOffset = container.offset();
+
+    var relX = e.pageX - containerOffset.left;
+    var relY = e.pageY - containerOffset.top;
+
+    measureStart = {
+      x: e.pageX,
+      y: e.pageY,
+      relX: relX,
+      relY: relY,
+      containerOffset: containerOffset
+    };
+
+    measureLine = $('<svg class="measure-line-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99;overflow:visible;"><line class="measure-line" stroke="#ff0000" stroke-width="2" stroke-dasharray="4,2"/><circle class="measure-start" r="4" fill="#ff0000"/><circle class="measure-end" r="4" fill="#ff0000"/></svg>');
+    container.append(measureLine);
+
+    measureLine.find('.measure-start').attr('cx', relX).attr('cy', relY);
+    measureLine.find('.measure-line').attr('x1', relX).attr('y1', relY)
+                                     .attr('x2', relX).attr('y2', relY);
+    measureLine.find('.measure-end').attr('cx', relX).attr('cy', relY);
+  });
+
+  // Measure - mousemove
+  $(document).on('mousemove.measure', function(e) {
+    if (!measureMode || !measureStart) return;
+
+    var endRelX = e.pageX - measureStart.containerOffset.left;
+    var endRelY = e.pageY - measureStart.containerOffset.top;
+
+    measureLine.find('.measure-line').attr('x2', endRelX).attr('y2', endRelY);
+    measureLine.find('.measure-end').attr('cx', endRelX).attr('cy', endRelY);
+
+    var dx = e.pageX - measureStart.x;
+    var dy = e.pageY - measureStart.y;
+    var pixelDist = Math.sqrt(dx*dx + dy*dy);
+    var microns = pixelDist / pixelsPerMicron;
+
+    if (!measureLabel) {
+      measureLabel = $('<div class="measure-label" style="position:absolute;background:rgba(0,0,0,0.8);color:white;padding:4px 8px;border-radius:4px;font-size:12px;z-index:99;pointer-events:none;"></div>');
+      $('.gallery-drag-area').append(measureLabel);
+    }
+
+    measureLabel.text(microns.toFixed(1) + ' \u00b5m (' + Math.round(pixelDist) + ' px)');
+    measureLabel.css({left: (endRelX + 15) + 'px', top: (endRelY - 10) + 'px'});
+  });
+
+  // Measure - mouseup (keep line visible)
+  $(document).on('mouseup.measure', function(e) {
+    if (!measureMode || !measureStart) return;
+    measureStart = null;
+  });
+
+  // Click outside image to clear measurement
+  $(document).on('click.measure', function(e) {
+    if (!measureMode) return;
+    if (!$(e.target).closest('.image-card').length &&
+        !$(e.target).closest('.measure-label').length &&
+        !$(e.target).closest('[id$="measure_toggle"]').length) {
+      removeMeasureLine();
+    }
+  });
+
+  // ============================================================================
+  // Selection
+  // ============================================================================
+
   // Single-click selection on image cards
   $(document).on('click', '.image-card', function(e) {
+    if (measureMode) return;
     if (wasDragging) {
       wasDragging = false;
       return;
@@ -20,6 +145,7 @@ $(document).ready(function() {
 
   // Drag-select
   $(document).on('mousedown', '.gallery-drag-area', function(e) {
+    if (measureMode) return;
     if ($(e.target).closest('.image-card').length > 0 &&
         !e.shiftKey) return;
 

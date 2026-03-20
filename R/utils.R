@@ -30,12 +30,36 @@ default_settings <- function() {
     raw_data_path = "",
     ferrybox_path = "",
     local_storage_path = file.path(tools::R_user_dir("algaware", "data"), "storage"),
-    db_folder = tools::R_user_dir("algaware", "data"),
-    non_biological_classes = "detritus,Air_bubbles,Beads",
-    class_list_path = "",
+    db_folder = "",
+    non_biological_classes = "detritus,Debris,Air_bubbles,Beads,mix",
     annotator = "",
+    extra_stations = list(),
+    pixels_per_micron = 2.77,
     n_mosaic_taxa = 5L,
     n_mosaic_images = 32L
+  )
+}
+
+#' Load SHARK station bundle (internal wrapper)
+#'
+#' Wraps the internal \code{SHARK4R:::load_station_bundle()} call to
+#' centralise the dependency and provide a fallback.
+#'
+#' @param verbose Passed to \code{load_station_bundle}.
+#' @return A data.frame of SHARK stations, or an empty data.frame on failure.
+#' @keywords internal
+load_shark_stations <- function(verbose = FALSE) {
+  if (!requireNamespace("SHARK4R", quietly = TRUE)) {
+    warning("Package 'SHARK4R' is required for station data.", call. = FALSE)
+    return(data.frame(STATION_NAME = character(0)))
+  }
+  tryCatch(
+    SHARK4R:::load_station_bundle(verbose = verbose),
+    error = function(e) {
+      warning("Failed to load SHARK station bundle: ", e$message,
+              call. = FALSE)
+      data.frame(STATION_NAME = character(0))
+    }
   )
 }
 

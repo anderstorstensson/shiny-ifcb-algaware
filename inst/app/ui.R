@@ -1,10 +1,31 @@
 ui <- bslib::page_sidebar(
-  title = paste("AlgAware", utils::packageVersion("algaware")),
-  theme = bslib::bs_theme(bootswatch = "flatly", version = 5),
+  title = tags$div(
+    style = "display: flex; align-items: center; width: 100%;",
+    tags$span(paste("AlgAware-IFCB", utils::packageVersion("algaware"))),
+    tags$img(src = "logo.png", class = "navbar-logo")
+  ),
+  theme = bslib::bs_theme(
+    bootswatch = "flatly", version = 5,
+    bg = "#fff", fg = "#333",
+    primary = "#2c5f7c",
+    "navbar-bg" = "#1b3a4b"
+  ),
 
   tags$head(
     tags$link(rel = "stylesheet", href = "styles.css"),
-    tags$script(src = "gallery.js")
+    tags$script(HTML("document.title = 'AlgAware-IFCB';")),
+    tags$link(rel = "icon", type = "image/x-icon", href = "favicon.ico"),
+    tags$link(rel = "icon", type = "image/png", sizes = "32x32",
+              href = "favicon-32.png"),
+    tags$link(rel = "icon", type = "image/png", sizes = "16x16",
+              href = "favicon-16.png"),
+    tags$script(src = "gallery.js"),
+    tags$style(HTML("
+      .navbar .navbar-logo {
+        margin-left: auto;
+        height: 30px;
+      }
+    "))
   ),
 
   # Sidebar
@@ -59,13 +80,16 @@ ui <- bslib::page_sidebar(
       icon = shiny::icon("chart-bar"),
       conditionalPanel(
         condition = "output.data_loaded",
-        h4("Baltic Sea"),
-        plotOutput("baltic_heatmap", height = "500px"),
-        plotOutput("baltic_stacked_bar", height = "400px"),
-        hr(),
-        h4("West Coast"),
-        plotOutput("westcoast_heatmap", height = "500px"),
-        plotOutput("westcoast_stacked_bar", height = "400px")
+        div(
+          style = "overflow-y: auto; max-height: 85vh;",
+          h4("Baltic Sea"),
+          plotOutput("baltic_heatmap", height = "800px"),
+          plotOutput("baltic_stacked_bar", height = "600px"),
+          hr(),
+          h4("West Coast"),
+          plotOutput("westcoast_heatmap", height = "800px"),
+          plotOutput("westcoast_stacked_bar", height = "600px")
+        )
       )
     ),
 

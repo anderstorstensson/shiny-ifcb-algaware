@@ -18,7 +18,16 @@ server <- function(input, output, session) {
     current_class_idx = 1L,
     current_region = "EAST",
     selected_images = character(0),
+    corrections = data.frame(
+      sample_name = character(0),
+      roi_number = integer(0),
+      original_class = character(0),
+      new_class = character(0),
+      stringsAsFactors = FALSE
+    ),
+    ferrybox_chl = NULL,
     cruise_info = "",
+    classifier_name = NULL,
     data_loaded = FALSE
   )
 
@@ -37,22 +46,30 @@ server <- function(input, output, session) {
   mod_validation_server("validation", rv, config)
   mod_report_server("report", rv, config)
 
+  # Cached biomass maps (invalidates when station_summary changes)
+  biomass_maps <- reactive({
+    req(rv$station_summary)
+    create_biomass_maps(rv$station_summary)
+  })
+
   # Maps
   output$biomass_map <- renderPlot({
-    req(rv$station_summary)
-    maps <- create_biomass_maps(rv$station_summary)
-    maps$biomass_map
+    id <- showNotification("Generating maps...", type = "message",
+                           duration = NULL, closeButton = FALSE)
+    on.exit(removeNotification(id), add = TRUE)
+    biomass_maps()$biomass_map
   })
 
   output$chl_map <- renderPlot({
-    req(rv$station_summary)
-    maps <- create_biomass_maps(rv$station_summary)
-    maps$chl_map
+    biomass_maps()$chl_map
   })
 
   # Heatmaps
   output$baltic_heatmap <- renderPlot({
     req(rv$baltic_wide, ncol(rv$baltic_wide) > 1)
+    id <- showNotification("Generating plots...", type = "message",
+                           duration = NULL, closeButton = FALSE)
+    on.exit(removeNotification(id), add = TRUE)
     create_heatmap(rv$baltic_wide, taxa_lookup = rv$taxa_lookup,
                    title = "Baltic Sea")
   })

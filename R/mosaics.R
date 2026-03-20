@@ -232,29 +232,33 @@ create_region_mosaics <- function(wide_summary, classifications, sample_ids,
     if (nrow(taxon_rois) == 0) next
 
     # Extract PNGs for these ROIs
-    png_paths <- character(0)
-    for (samp in unique(taxon_rois$sample_name)) {
+    out_folder <- file.path(temp_dir, "algaware_mosaics")
+    samp_names <- unique(taxon_rois$sample_name)
+    png_paths_list <- lapply(samp_names, function(samp) {
       roi_file <- list.files(raw_data_path, pattern = paste0(samp, "\\.roi$"),
                              recursive = TRUE, full.names = TRUE)
-      if (length(roi_file) == 0) next
+      if (length(roi_file) == 0) return(character(0))
 
       samp_rois <- taxon_rois$roi_number[taxon_rois$sample_name == samp]
-      out_folder <- file.path(temp_dir, "algaware_mosaics")
 
-      iRfcb::ifcb_extract_pngs(
-        roi_file[1],
-        out_folder,
-        ROInumbers = samp_rois,
-        verbose = FALSE
+      tryCatch(
+        iRfcb::ifcb_extract_pngs(
+          roi_file[1],
+          out_folder,
+          ROInumbers = samp_rois,
+          verbose = FALSE
+        ),
+        error = function(e) NULL
       )
 
-      extracted <- list.files(
-        file.path(out_folder, samp),
-        pattern = "\\.png$",
-        full.names = TRUE
+      # Only collect the specific PNGs for the requested ROIs
+      expected_files <- file.path(
+        out_folder, samp,
+        paste0(samp, "_", sprintf("%05d", samp_rois), ".png")
       )
-      png_paths <- c(png_paths, extracted)
-    }
+      expected_files[file.exists(expected_files)]
+    })
+    png_paths <- unlist(png_paths_list, use.names = FALSE)
 
     if (length(png_paths) > 0) {
       mosaics[[taxon]] <- create_mosaic(png_paths, n_images = n_images)

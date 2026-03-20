@@ -1,0 +1,68 @@
+test_that("load_algaware_stations returns a data.frame", {
+  stations <- load_algaware_stations()
+  expect_s3_class(stations, "data.frame")
+  expect_true("STATION_NAME" %in% names(stations))
+  expect_true("COAST" %in% names(stations))
+  expect_true("STATION_NAME_SHORT" %in% names(stations))
+  expect_true(nrow(stations) > 0)
+})
+
+test_that("load_algaware_stations appends extra stations", {
+  base <- load_algaware_stations()
+  extra <- list(
+    list(STATION_NAME = "TEST_STATION_XYZ",
+         COAST = "EAST",
+         STATION_NAME_SHORT = "TST")
+  )
+
+  result <- load_algaware_stations(extra_stations = extra)
+  expect_equal(nrow(result), nrow(base) + 1)
+  expect_true("TEST_STATION_XYZ" %in% result$STATION_NAME)
+})
+
+test_that("load_algaware_stations does not duplicate existing stations", {
+  base <- load_algaware_stations()
+  existing_name <- base$STATION_NAME[1]
+
+  extra <- list(
+    list(STATION_NAME = existing_name,
+         COAST = "EAST",
+         STATION_NAME_SHORT = "DUP")
+  )
+
+  result <- load_algaware_stations(extra_stations = extra)
+  expect_equal(nrow(result), nrow(base))
+})
+
+test_that("assign_station_visits assigns visit IDs", {
+  metadata <- data.frame(
+    STATION_NAME = c("STN_A", "STN_A", "STN_A", "STN_B"),
+    sample_time = as.POSIXct(c(
+      "2022-01-01 10:00:00",
+      "2022-01-01 11:00:00",
+      "2022-01-03 10:00:00",
+      "2022-01-01 10:00:00"
+    )),
+    stringsAsFactors = FALSE
+  )
+
+  result <- algaware:::assign_station_visits(metadata, max_gap_hours = 12)
+  expect_true("visit_id" %in% names(result))
+  expect_false(any(is.na(result$visit_id)))
+
+  # First two bins at STN_A should be same visit, third a different one
+  stn_a <- result[result$STATION_NAME == "STN_A", ]
+  expect_equal(stn_a$visit_id[1], stn_a$visit_id[2])
+  expect_false(stn_a$visit_id[2] == stn_a$visit_id[3])
+})
+
+test_that("assign_station_visits handles single bin per station", {
+  metadata <- data.frame(
+    STATION_NAME = "STN_A",
+    sample_time = as.POSIXct("2022-01-01 10:00:00"),
+    stringsAsFactors = FALSE
+  )
+
+  result <- algaware:::assign_station_visits(metadata)
+  expect_equal(result$visit_id, "STN_A_visit1")
+})

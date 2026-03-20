@@ -9,11 +9,14 @@
 #'   \code{name}, \code{AphiaID}.
 #' @param non_bio_classes Character vector of non-biological class names to
 #'   exclude.
+#' @param pixels_per_micron Conversion factor from pixels to microns.
+#'   Default 2.77.
 #' @return A data.frame with per-sample, per-class biovolume data joined with
 #'   taxonomy.
 #' @export
 summarize_biovolumes <- function(feature_folder, hdr_folder, classifications,
-                                 taxa_lookup, non_bio_classes = character(0)) {
+                                 taxa_lookup, non_bio_classes = character(0),
+                                 pixels_per_micron = 2.77) {
   # Build image name (sample_NNNNN format)
   image_names <- paste0(classifications$sample_name, "_",
                         sprintf("%05d", classifications$roi_number))
@@ -26,7 +29,9 @@ summarize_biovolumes <- function(feature_folder, hdr_folder, classifications,
     hdr_folder = hdr_folder,
     custom_images = image_names,
     custom_classes = classifications$class_name,
-    diatom_include = diatom_classes
+    diatom_include = diatom_classes,
+    micron_factor = 1 / pixels_per_micron,
+    verbose = FALSE
   )
 
   # Join with taxonomy
@@ -82,11 +87,11 @@ identify_diatom_classes <- function(taxa_lookup) {
 #'   \code{carbon_ug_per_liter}, and \code{Presence_cat}.
 #' @export
 aggregate_station_data <- function(biovolume_data, metadata) {
-  # Join biovolume with metadata
+  # Join biovolume with metadata (ml_analyzed comes from biovolume_data)
   all_data <- merge(
     biovolume_data,
     metadata[, c("pid", "STATION_NAME", "STATION_NAME_SHORT", "COAST",
-                 "sample_time", "ml_analyzed")],
+                 "sample_time")],
     by.x = "sample",
     by.y = "pid",
     all.x = TRUE
@@ -144,13 +149,15 @@ aggregate_station_data <- function(biovolume_data, metadata) {
   agg <- merge(agg, sample_volume, by = c("visit_id", "STATION_NAME"),
                all.x = TRUE)
 
-  # Compute per-liter concentrations
-  agg$counts_per_liter <- agg$total_counts / (agg$total_ml_analyzed / 1000)
-  agg$biovolume_mm3_per_liter <- agg$total_biovolume_mm3 / (agg$total_ml_analyzed / 1000)
-  agg$carbon_ug_per_liter <- agg$total_carbon_ug / (agg$total_ml_analyzed / 1000)
+  # Compute per-liter concentrations (guard against zero volume)
+  ml_liters <- agg$total_ml_analyzed / 1000
+  ml_liters[ml_liters <= 0 | is.na(ml_liters)] <- NA_real_
+  agg$counts_per_liter <- agg$total_counts / ml_liters
+  agg$biovolume_mm3_per_liter <- agg$total_biovolume_mm3 / ml_liters
+  agg$carbon_ug_per_liter <- agg$total_carbon_ug / ml_liters
 
   # Join station coordinates
-  station_list <- SHARK4R:::load_station_bundle(verbose = FALSE)
+  station_list <- load_shark_stations(verbose = FALSE)
   station_coords <- station_list[, c("STATION_NAME",
                                      "LATITUDE_WGS84_SWEREF99_DD",
                                      "LONGITUDE_WGS84_SWEREF99_DD")]

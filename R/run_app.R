@@ -3,7 +3,8 @@
 #' Start the interactive AlgAware application for IFCB phytoplankton
 #' data processing, validation, and report generation.
 #'
-#' @param ... Additional arguments passed to \code{\link[shiny]{shinyApp}}.
+#' @param launch.browser Logical; open the app in a browser? Default TRUE.
+#' @param ... Additional arguments passed to \code{\link[shiny]{runApp}}.
 #' @return A Shiny app object (invisibly).
 #' @export
 #' @examples
