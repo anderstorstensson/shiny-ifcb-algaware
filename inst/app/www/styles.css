@@ -170,8 +170,9 @@
 }
 
 /* Fixed height for class selector area so toolbar doesn't jump
-   when switching between classes with different badge/name combos */
-.toolbar-class-select {
+   when switching between classes with different badge/name combos.
+   Only applied when data is loaded via JS-added class. */
+.toolbar-class-select.has-data {
   min-height: 90px;
 }
 

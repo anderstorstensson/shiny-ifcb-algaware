@@ -2,6 +2,18 @@
 // Adapted from ClassiPyR's gallery.js
 
 $(document).ready(function() {
+  // Toggle toolbar min-height when data loads/unloads
+  Shiny.addCustomMessageHandler('toggle-toolbar-height', function(action) {
+    var el = document.getElementById('toolbar-class-container');
+    if (el) {
+      if (action === 'add') {
+        el.classList.add('has-data');
+      } else {
+        el.classList.remove('has-data');
+      }
+    }
+  });
+
   var wasDragging = false;
   var startX, startY;
   var selectionBox = null;

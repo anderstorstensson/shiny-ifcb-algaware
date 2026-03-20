@@ -24,6 +24,7 @@ mod_gallery_ui <- function(id) {
                           class = "btn-outline-secondary btn-sm",
                           style = "position: relative; z-index: 10;"),
       shiny::div(
+        id = "toolbar-class-container",
         class = "toolbar-select toolbar-class-select",
         style = "width: 390px; min-width: 390px; max-width: 390px; text-align: center;",
         shiny::selectizeInput(ns("class_select"), NULL, choices = NULL,
@@ -224,6 +225,9 @@ mod_gallery_server <- function(id, rv, config) {
       shiny::updateSelectizeInput(session, "class_select",
                                   choices = classes,
                                   selected = selected)
+      # Toggle min-height on toolbar when data is loaded
+      has_data <- if (length(classes) > 0) "add" else "remove"
+      session$sendCustomMessage("toggle-toolbar-height", has_data)
     })
 
     # Jump to class when user picks from selectize
