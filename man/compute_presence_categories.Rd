@@ -13,7 +13,8 @@ compute_presence_categories(agg)
 The input data.frame with added pct and Presence_cat columns.
 }
 \description{
-Categories: 5 = dominant (>=50\%), 4 = abundant (>=10\%),
+Categories follow the SHARK/HELCOM abundance scale:
+5 = dominant (>=50\%), 4 = abundant (>=10\%),
 3 = common (>=1\%), 2 = scarce (>=0.1\%), 1 = rare (>0\%), 0 = absent.
 }
 \keyword{internal}

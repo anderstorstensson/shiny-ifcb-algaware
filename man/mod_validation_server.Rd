@@ -17,5 +17,15 @@ mod_validation_server(id, rv, config)
 NULL (side effects only).
 }
 \description{
-Validation Module Server
+Provides four validation actions:
+\enumerate{
+\item \strong{Store Annotations}: save selected images to the SQLite
+database (persistent, shared with ClassiPyR)
+\item \strong{Relabel Selected}: move selected images to a different class
+(session-only, logged in rv$corrections)
+\item \strong{Relabel Class}: move ALL images of the current class in
+the current region to a different class (session-only)
+\item \strong{Invalidate Class}: mark an entire class as non-biological /
+unclassified (session-only)
+}
 }

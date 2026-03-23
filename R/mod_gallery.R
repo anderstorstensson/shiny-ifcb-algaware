@@ -138,7 +138,9 @@ mod_gallery_server <- function(id, rv, config) {
     ns <- session$ns
     page <- shiny::reactiveVal(1L)
 
-    # Gallery temp directory and session cleanup (H4)
+    # Temp directory for extracted PNG images. Each browser session gets its
+    # own folder (keyed by session$token) so concurrent users don't collide.
+    # Cleaned up automatically when the session ends.
     gallery_dir <- file.path(tempdir(), "algaware_gallery", session$token)
     resource_registered <- FALSE
 
@@ -191,8 +193,9 @@ mod_gallery_server <- function(id, rv, config) {
       imgs[start:end, ]
     })
 
-    # PNG extraction as separate reactive (H2: avoids re-extraction on
-    # selection changes since this only depends on paginated data)
+    # ---- PNG extraction ----
+    # Separated into its own reactive so it only re-runs when the *page data*
+    # changes, not when the user clicks images (selection is handled in JS).
     gallery_data <- shiny::reactive({
       imgs <- tryCatch(paginated(), error = function(e) NULL)
       if (is.null(imgs) || nrow(imgs) == 0) return(NULL)
@@ -211,10 +214,15 @@ mod_gallery_server <- function(id, rv, config) {
       imgs
     })
 
-    # Flag to suppress selectize observer during programmatic updates
+    # ---- Class dropdown synchronization ----
+    # Problem: when we programmatically update the selectize dropdown (e.g. on
+    # region change), it fires an input$class_select event. Without this flag,
+    # that event would be mistaken for a user selection and cause unwanted jumps.
+    # Solution: set updating_select = TRUE before programmatic updates, then
+    # reset it in the observer that handles user selections.
     updating_select <- shiny::reactiveVal(FALSE)
 
-    # Update selectize when classes or current index change
+    # Keep the selectize dropdown in sync with the current class index
     shiny::observe({
       classes <- region_classes()
       # Explicit dependency on current_class_idx
@@ -225,7 +233,9 @@ mod_gallery_server <- function(id, rv, config) {
       shiny::updateSelectizeInput(session, "class_select",
                                   choices = classes,
                                   selected = selected)
-      # Toggle min-height on toolbar when data is loaded
+      # Tell the browser to adjust toolbar height (JS handler in gallery.js).
+      # sendCustomMessage() calls a JavaScript function registered via
+      # Shiny.addCustomMessageHandler() in inst/app/www/gallery.js.
       has_data <- if (length(classes) > 0) "add" else "remove"
       session$sendCustomMessage("toggle-toolbar-height", has_data)
     })
@@ -301,7 +311,7 @@ mod_gallery_server <- function(id, rv, config) {
       shiny::span(class = "page-info", paste0(page(), "/", total_pages))
     })
 
-    # Navigation
+    # ---- Class and page navigation ----
     shiny::observeEvent(input$prev_class, {
       if (rv$current_class_idx > 1) {
         rv$current_class_idx <- rv$current_class_idx - 1L
@@ -334,7 +344,11 @@ mod_gallery_server <- function(id, rv, config) {
       if (page() < total_pages) page(page() + 1L)
     })
 
-    # Toggle image selection (H3: update R state, JS handles visual toggle)
+    # ---- Image selection ----
+    # Selection works via a JS/R split: clicking an image in the browser sends
+    # a message to R (input$toggle_image), and R updates rv$selected_images.
+    # The visual highlight (CSS class .selected) is toggled client-side in JS
+    # for instant feedback without a server round-trip.
     shiny::observeEvent(input$toggle_image, {
       img_id <- input$toggle_image$img
       if (img_id %in% rv$selected_images) {
@@ -350,7 +364,9 @@ mod_gallery_server <- function(id, rv, config) {
       rv$selected_images <- union(rv$selected_images, new_imgs)
     })
 
-    # Select current page -- sync visual state to JS
+    # Select all images on current page, then sync visual state to browser.
+    # syncSelection is a JS handler (gallery.js) that adds/removes the
+    # .selected CSS class on image cards to match the R-side state.
     shiny::observeEvent(input$select_page, {
       imgs <- tryCatch(paginated(), error = function(e) NULL)
       if (is.null(imgs) || nrow(imgs) == 0) return()
@@ -360,13 +376,13 @@ mod_gallery_server <- function(id, rv, config) {
                                 list(selected = rv$selected_images))
     })
 
-    # Deselect all -- sync visual state to JS
+    # Clear all selections and sync to browser
     shiny::observeEvent(input$deselect, {
       rv$selected_images <- character(0)
       session$sendCustomMessage("syncSelection", list(selected = list()))
     })
 
-    # Measure tool
+    # ---- Measure tool (ruler overlay, handled in gallery.js) ----
     measure_active <- shiny::reactiveVal(FALSE)
 
     shiny::observeEvent(input$measure_toggle, {
@@ -383,8 +399,10 @@ mod_gallery_server <- function(id, rv, config) {
                                 config$pixels_per_micron)
     })
 
-    # Render gallery (H2+H3: no longer depends on rv$selected_images;
-    # selection state is managed client-side via JS)
+    # ---- Gallery rendering ----
+    # This only depends on gallery_data() (paginated images), NOT on
+    # rv$selected_images. Selection highlighting is managed entirely in JS
+    # so selecting/deselecting images doesn't cause a full re-render.
     output$image_gallery <- shiny::renderUI({
       imgs <- gallery_data()
       if (is.null(imgs) || nrow(imgs) == 0) {

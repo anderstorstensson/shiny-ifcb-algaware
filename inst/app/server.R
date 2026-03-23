@@ -1,46 +1,78 @@
 server <- function(input, output, session) {
 
-  # Reactive values for app state
+  # ---------------------------------------------------------------------------
+  # Shared reactive state (rv)
+  #
+  # This is the central data store that all Shiny modules read from and write
+  # to. In Shiny, `reactiveValues` is like a named list where any change to a
+  # value automatically triggers re-execution of code that depends on it.
+  #
+  # Data flow overview:
+  #   1. mod_data_loader  -> sets most rv fields after fetching & processing
+  #   2. mod_gallery      -> reads classifications, writes selected_images
+  #   3. mod_validation   -> reads/writes classifications & corrections
+  #   4. mod_report       -> reads all fields to generate the Word report
+  # ---------------------------------------------------------------------------
   rv <- reactiveValues(
-    dashboard_metadata = NULL,
-    cruise_numbers = character(0),
-    matched_metadata = NULL,
-    classifications_raw = NULL,
-    classifications = NULL,
-    invalidated_classes = character(0),
-    taxa_lookup = NULL,
-    station_summary = NULL,
-    baltic_wide = NULL,
-    westcoast_wide = NULL,
-    baltic_samples = character(0),
-    westcoast_samples = character(0),
-    class_list = character(0),
-    current_class_idx = 1L,
-    current_region = "EAST",
-    selected_images = character(0),
-    corrections = data.frame(
-      sample_name = character(0),
-      roi_number = integer(0),
+    # -- Data loading stage (set by mod_data_loader) --
+    dashboard_metadata  = NULL,          # Raw metadata from IFCB Dashboard API
+    cruise_numbers      = character(0),  # Available cruise IDs for dropdown
+    matched_metadata    = NULL,          # Metadata filtered & matched to stations
+    classifications_raw = NULL,          # Original AI predictions (immutable)
+    classifications     = NULL,          # Working copy (mutated by validation)
+    invalidated_classes = character(0),  # Classes marked as non-biological
+    taxa_lookup         = NULL,          # Mapping: class_name -> scientific name
+    station_summary     = NULL,          # Aggregated biovolume per station/taxon
+    baltic_wide         = NULL,          # Wide-format summary for Baltic region
+    westcoast_wide      = NULL,          # Wide-format summary for West Coast
+    baltic_samples      = character(0),  # Sample IDs belonging to Baltic
+    westcoast_samples   = character(0),  # Sample IDs belonging to West Coast
+    class_list          = character(0),  # Approved class names for annotation
+    ferrybox_chl        = NULL,          # Chlorophyll data from ferrybox sensors
+    image_counts        = NULL,          # Per-sample image counts (cruise-wide)
+    cruise_info         = "",            # Human-readable cruise description
+    classifier_name     = NULL,          # Name of the AI classifier model
+
+    # -- Gallery & validation state (shared between modules) --
+    current_class_idx   = 1L,            # Index into the current region's class list
+    current_region      = "EAST",        # "EAST" (Baltic) or "WEST" (West Coast)
+    selected_images     = character(0),  # Image IDs selected in gallery for action
+    corrections = data.frame(            # Log of all user corrections this session
+      sample_name    = character(0),
+      roi_number     = integer(0),
       original_class = character(0),
-      new_class = character(0),
+      new_class      = character(0),
       stringsAsFactors = FALSE
     ),
-    ferrybox_chl = NULL,
-    image_counts = NULL,
-    cruise_info = "",
-    classifier_name = NULL,
-    data_loaded = FALSE
+
+    # -- App state flag --
+    data_loaded = FALSE                  # TRUE once data loading completes
   )
 
-  # Config (settings)
+  # ---------------------------------------------------------------------------
+  # Config (persistent settings loaded from JSON on disk)
+  # ---------------------------------------------------------------------------
   settings <- load_settings()
   config <- do.call(reactiveValues, settings)
 
-  # Flag for conditional panels
+  # ---------------------------------------------------------------------------
+  # Conditional UI visibility
+  #
+  # Shiny's conditionalPanel() evaluates a JavaScript expression to show/hide
+  # UI elements. Here we expose `data_loaded` as an output so the JS condition
+  # "output.data_loaded" works. `suspendWhenHidden = FALSE` ensures it stays
+  # up-to-date even when no one is looking at it.
+  # ---------------------------------------------------------------------------
   output$data_loaded <- reactive({ isTRUE(rv$data_loaded) })
   outputOptions(output, "data_loaded", suspendWhenHidden = FALSE)
 
-  # Initialize modules
+  # ---------------------------------------------------------------------------
+  # Initialize Shiny modules
+  #
+  # Each mod_*_server() function runs in its own namespace (the string ID
+  # matches the corresponding mod_*_ui() call in ui.R). Modules communicate
+  # via the shared `rv` and `config` reactive values passed as arguments.
+  # ---------------------------------------------------------------------------
   mod_settings_server("settings", config)
   mod_data_loader_server("data_loader", config, rv)
   mod_gallery_server("gallery", rv, config)

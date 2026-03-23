@@ -8,7 +8,8 @@ create_mosaic(
   image_paths,
   n_images = 32L,
   max_width_px = 1800L,
-  target_height = 120L
+  target_height = 120L,
+  max_height_px = 1500L
 )
 }
 \arguments{
@@ -20,6 +21,10 @@ create_mosaic(
 (fits A4 page at 300 dpi with margins).}
 
 \item{target_height}{Base target height in pixels. Default 120.}
+
+\item{max_height_px}{Maximum mosaic height in pixels. Default 1500
+(approximately half an A4 page at 300 dpi). Images are dropped to
+stay within this limit.}
 }
 \value{
 A \code{magick} image object.

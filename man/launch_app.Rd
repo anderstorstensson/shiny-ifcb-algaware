@@ -4,10 +4,13 @@
 \alias{launch_app}
 \title{Launch the AlgAware Shiny Application}
 \usage{
-launch_app(launch.browser = TRUE, ...)
+launch_app(launch.browser = TRUE, reset_settings = FALSE, ...)
 }
 \arguments{
 \item{launch.browser}{Logical; open the app in a browser? Default TRUE.}
+
+\item{reset_settings}{Logical; if TRUE, reset all settings to defaults
+before launching. Default FALSE.}
 
 \item{...}{Additional arguments passed to \code{\link[shiny]{runApp}}.}
 }
@@ -21,5 +24,6 @@ data processing, validation, and report generation.
 \examples{
 \dontrun{
   algaware::launch_app()
+  algaware::launch_app(reset_settings = TRUE)
 }
 }

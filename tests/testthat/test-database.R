@@ -184,6 +184,81 @@ test_that("save_global_class_list_db replaces existing data", {
   expect_equal(result, c("X", "Y", "Z"))
 })
 
+test_that("save_annotations_db stores class_lists per sample", {
+  tmp_dir <- file.path(tempdir(), paste0("db_classlist_", Sys.getpid()))
+  dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+  db_path <- file.path(tmp_dir, "annotations.sqlite")
+
+  annotations <- data.frame(
+    sample_name = c("sample1", "sample1"),
+    roi_number = c(1L, 2L),
+    class_name = c("ClassA", "ClassB"),
+    stringsAsFactors = FALSE
+  )
+
+  save_annotations_db(db_path, annotations,
+                       class_list = c("ClassA", "ClassB", "ClassC"))
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  cl <- DBI::dbGetQuery(con,
+    "SELECT * FROM class_lists WHERE sample_name = 'sample1' ORDER BY class_index")
+  expect_equal(nrow(cl), 3)
+  expect_equal(cl$class_name, c("ClassA", "ClassB", "ClassC"))
+})
+
+test_that("save_annotations_db rejects all-invalid annotations", {
+  tmp_dir <- file.path(tempdir(), paste0("db_allinvalid_", Sys.getpid()))
+  dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+  db_path <- file.path(tmp_dir, "annotations.sqlite")
+
+  annotations <- data.frame(
+    sample_name = "sample1",
+    roi_number = 1L,
+    class_name = "InvalidClass",
+    stringsAsFactors = FALSE
+  )
+
+  expect_warning(
+    result <- save_annotations_db(db_path, annotations,
+                                   class_list = c("ValidOnly")),
+    "Rejected"
+  )
+  expect_true(result)
+})
+
+test_that("init_db_schema migrates existing db without is_manual", {
+  tmp <- tempfile(fileext = ".sqlite")
+  on.exit(unlink(tmp), add = TRUE)
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), tmp)
+  DBI::dbExecute(con, "
+    CREATE TABLE annotations (
+      sample_name TEXT NOT NULL,
+      roi_number INTEGER NOT NULL,
+      class_name TEXT NOT NULL,
+      annotator TEXT,
+      timestamp TEXT,
+      PRIMARY KEY (sample_name, roi_number)
+    )
+  ")
+  DBI::dbExecute(con, "CREATE TABLE class_lists (sample_name TEXT, class_index INTEGER, class_name TEXT)")
+  DBI::dbExecute(con, "CREATE TABLE class_taxonomy (class_name TEXT PRIMARY KEY)")
+  DBI::dbExecute(con, "CREATE TABLE global_class_list (class_index INTEGER PRIMARY KEY, class_name TEXT)")
+
+  algaware:::init_db_schema(con)
+
+  cols <- DBI::dbGetQuery(con, "PRAGMA table_info(annotations)")
+  expect_true("is_manual" %in% cols$name)
+
+  DBI::dbDisconnect(con)
+})
+
 test_that("save_annotations_db upserts (replaces on conflict)", {
   tmp_dir <- file.path(tempdir(), paste0("db_upsert_", Sys.getpid()))
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)

@@ -10,7 +10,8 @@
 #' @param non_bio_classes Character vector of non-biological class names to
 #'   exclude.
 #' @param pixels_per_micron Conversion factor from pixels to microns.
-#'   Default 2.77.
+#'   Default 2.77, which is the optical calibration constant for the standard
+#'   IFCB instrument. Different IFCB units may use slightly different values.
 #' @return A data.frame with per-sample, per-class biovolume data joined with
 #'   taxonomy.
 #' @export
@@ -53,11 +54,16 @@ summarize_biovolumes <- function(feature_folder, hdr_folder, classifications,
 
 #' Identify diatom classes from taxa lookup
 #'
+#' Diatoms require a different biovolume formula than other phytoplankton
+#' (they have silica frustules that affect the carbon:biovolume ratio).
+#' This function matches class names against known diatom genera so that
+#' \code{iRfcb::ifcb_summarize_biovolumes()} can apply the correct formula.
+#'
 #' @param taxa_lookup A data.frame with \code{clean_names} column.
 #' @return Character vector of class names likely to be diatoms.
 #' @keywords internal
 identify_diatom_classes <- function(taxa_lookup) {
-  # Known diatom-related patterns
+  # Genus-level patterns for diatom taxa (Bacillariophyta)
   diatom_patterns <- c(
     "Navicula", "Actinocyclus", "Achnanthes", "Proboscia", "rhizosolenia",
     "Chaetocero", "centrales", "Centrales", "Coscinodiscus", "Thalassiosira",
@@ -109,13 +115,20 @@ compute_sample_volumes <- function(all_data) {
     FUN = sum,
     na.rm = TRUE
   )
+  n_samples <- stats::aggregate(
+    sample ~ visit_id + STATION_NAME,
+    data = sample_meta,
+    FUN = length
+  )
+  names(n_samples)[3] <- "n_samples"
   median_time <- stats::aggregate(
     sample_time ~ visit_id + STATION_NAME,
     data = sample_meta,
     FUN = stats::median
   )
   names(median_time)[3] <- "median_time"
-  merge(sample_volume, median_time, by = c("visit_id", "STATION_NAME"))
+  result <- merge(sample_volume, n_samples, by = c("visit_id", "STATION_NAME"))
+  merge(result, median_time, by = c("visit_id", "STATION_NAME"))
 }
 
 #' Compute per-liter concentrations from aggregated data
@@ -136,7 +149,8 @@ compute_per_liter <- function(agg) {
 
 #' Compute presence categories based on percentage of total counts
 #'
-#' Categories: 5 = dominant (>=50%), 4 = abundant (>=10%),
+#' Categories follow the SHARK/HELCOM abundance scale:
+#' 5 = dominant (>=50%), 4 = abundant (>=10%),
 #' 3 = common (>=1%), 2 = scarce (>=0.1%), 1 = rare (>0%), 0 = absent.
 #'
 #' @param agg Data.frame with visit_id, STATION_NAME, counts_per_liter.
@@ -239,6 +253,9 @@ collect_ferrybox_data <- function(sample_times, ferrybox_path) {
     ))
   }
 
+  # SEATRACK parameter codes for ferrybox sensors. Each "8xxxx" code is a
+  # measurement parameter; the corresponding "88xxxx" is its QC flag (1 = good).
+  # Key parameter: 8063 = chlorophyll fluorescence (ug/L), 88063 = its QC flag.
   ferrybox_parameters <- c("70", "80070", "8063", "88063", "8165", "88165",
                            "8173", "88173", "8166", "88166", "8172", "88172",
                            "8174", "88174", "8177", "88177", "8179", "88179",
@@ -250,7 +267,8 @@ collect_ferrybox_data <- function(sample_times, ferrybox_path) {
     parameters = ferrybox_parameters
   )
 
-  # Apply QC flags and rename
+  # Extract chlorophyll fluorescence (parameter 8063), keeping only values
+  # where the QC flag (parameter 88063) equals 1 (= quality approved)
   if (nrow(fb_data) > 0 && "8063" %in% names(fb_data)) {
     fb_data$chl <- ifelse(
       !is.na(fb_data[["88063"]]) & fb_data[["88063"]] == 1,

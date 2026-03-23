@@ -80,6 +80,18 @@ get_region_context <- function(rv) {
 
 #' Validation Module Server
 #'
+#' Provides four validation actions:
+#' \enumerate{
+#'   \item \strong{Store Annotations}: save selected images to the SQLite
+#'     database (persistent, shared with ClassiPyR)
+#'   \item \strong{Relabel Selected}: move selected images to a different class
+#'     (session-only, logged in rv$corrections)
+#'   \item \strong{Relabel Class}: move ALL images of the current class in
+#'     the current region to a different class (session-only)
+#'   \item \strong{Invalidate Class}: mark an entire class as non-biological /
+#'     unclassified (session-only)
+#' }
+#'
 #' @param id Module namespace ID.
 #' @param rv Reactive values for app state.
 #' @param config Reactive values with settings.
@@ -89,7 +101,7 @@ mod_validation_server <- function(id, rv, config) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # Store annotations
+    # ---- 1. Store Annotations (to database) ----
     shiny::observeEvent(input$store_annotations, {
       shiny::req(length(rv$selected_images) > 0)
 
@@ -138,7 +150,7 @@ mod_validation_server <- function(id, rv, config) {
       }
     })
 
-    # Relabel selected images
+    # ---- 2. Relabel Selected Images (session-only) ----
     shiny::observeEvent(input$relabel_selected, {
       shiny::req(length(rv$selected_images) > 0)
 
@@ -212,7 +224,7 @@ mod_validation_server <- function(id, rv, config) {
       )
     })
 
-    # Relabel class
+    # ---- 3. Relabel Entire Class (session-only) ----
     shiny::observeEvent(input$relabel_class, {
       ctx <- get_region_context(rv)
       if (is.null(ctx$current_class)) return()
@@ -288,7 +300,7 @@ mod_validation_server <- function(id, rv, config) {
       )
     })
 
-    # Invalidate class
+    # ---- 4. Invalidate Class (session-only) ----
     shiny::observeEvent(input$invalidate_class, {
       ctx <- get_region_context(rv)
       if (is.null(ctx$current_class)) return()
@@ -339,7 +351,7 @@ mod_validation_server <- function(id, rv, config) {
       )
     })
 
-    # Status display
+    # ---- Status display (sidebar summary of corrections) ----
     output$validation_status <- shiny::renderUI({
       n_selected <- length(rv$selected_images)
       n_invalidated <- length(rv$invalidated_classes)

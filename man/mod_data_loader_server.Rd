@@ -11,11 +11,14 @@ mod_data_loader_server(id, config, rv)
 
 \item{config}{Reactive values with settings.}
 
-\item{rv}{Reactive values for app state.}
+\item{rv}{Reactive values for app state (see server.R for field docs).}
 }
 \value{
 NULL (side effects only).
 }
 \description{
-Data Loader Module Server
+Handles the full data loading pipeline: fetch metadata from the IFCB
+Dashboard, match bins to monitoring stations, download raw files and
+classifications, compute biovolumes, and populate the shared reactive
+state (\code{rv}).
 }

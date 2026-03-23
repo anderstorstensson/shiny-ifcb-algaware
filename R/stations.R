@@ -49,11 +49,15 @@ match_bins_to_stations <- function(metadata, algaware_stations) {
     station_bundle$STATION_NAME %in% algaware_stations$STATION_NAME,
   ]
 
+  # Convert station coordinates to an sf spatial object.
+  # Coordinates are in WGS84 (GPS) decimal degrees (CRS 4326).
   stations_sf <- sf::st_as_sf(
     algaware_station_data,
     coords = c("LONGITUDE_WGS84_SWEREF99_DD", "LATITUDE_WGS84_SWEREF99_DD"),
     crs = 4326
   )
+  # Transform to SWEREF99 TM (CRS 3006, the Swedish national projection)
+  # so that buffer distances are in meters rather than degrees.
   stations_sf <- sf::st_transform(stations_sf, 3006)
 
   metadata <- metadata[
@@ -69,11 +73,15 @@ match_bins_to_stations <- function(metadata, algaware_stations) {
   )
   metadata_sf <- sf::st_transform(metadata_sf, 3006)
 
+  # Create circular buffers around each station. OUT_OF_BOUNDS_RADIUS (meters)
+  # comes from the SHARK station register and defines how far from the station
+  # centroid a sample can be and still count as "at that station".
   station_buffers <- sf::st_buffer(
     stations_sf,
     dist = algaware_station_data$OUT_OF_BOUNDS_RADIUS
   )
 
+  # Spatial join: keep only IFCB bins that fall within a station buffer
   joined <- sf::st_join(
     metadata_sf,
     station_buffers[, "STATION_NAME"],
@@ -94,7 +102,9 @@ match_bins_to_stations <- function(metadata, algaware_stations) {
 #' @param metadata A data.frame with \code{STATION_NAME} and
 #'   \code{sample_time} columns (POSIXct).
 #' @param max_gap_hours Maximum gap between consecutive bins to consider them
-#'   part of the same visit. Default 12 hours.
+#'   part of the same visit. Default 12 hours. The ship may pass the same
+#'   station twice on different days; this threshold splits those into
+#'   separate visits.
 #' @return The input data.frame with an added \code{visit_id} column
 #'   (character: \code{STATION_NAME_visitN}).
 #' @keywords internal

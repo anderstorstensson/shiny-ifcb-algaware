@@ -27,7 +27,8 @@ summarize_biovolumes(
 exclude.}
 
 \item{pixels_per_micron}{Conversion factor from pixels to microns.
-Default 2.77.}
+Default 2.77, which is the optical calibration constant for the standard
+IFCB instrument. Different IFCB units may use slightly different values.}
 }
 \value{
 A data.frame with per-sample, per-class biovolume data joined with

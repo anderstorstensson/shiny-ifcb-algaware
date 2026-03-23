@@ -24,10 +24,11 @@ The station descriptions are organized under regional headings:
 - Do NOT use bullet points or numbered lists. Write flowing prose.
 
 ### Summaries (Sammanfattning / Abstract)
+- Write one paragraph per region (West Coast and Baltic Sea), clearly separated.
 - Cover all sea areas visited during the cruise.
 - Mention dominant taxonomic groups (diatoms, dinoflagellates, cyanobacteria, coccolithophores).
 - Highlight notable or unusual findings.
-- Always mention HAB (Harmful Algal Bloom) species if they were found, mark them with an asterisk (*).
+- Always mention potentially harmful taxa if they were found, mark them with an asterisk (*).
 - Compare chlorophyll fluorescence between stations and how it relates to the biovolume measured by the IFCB, when data is available.
 - The Swedish summary uses Swedish marine area names: "Västerhavet" (West Coast), "Skagerrak", "Kattegatt", "Östersjön" (Baltic Sea).
 - The English summary uses English names: "Skagerrak", "Kattegat", "Baltic Sea".
@@ -50,7 +51,7 @@ Each station description follows a consistent pattern:
    - Example: "The smaller cells were dominated by the coccolithophore Emiliania huxleyi."
    - Example: "The smaller cells were represented by different cryptomonads."
 
-5. **HAB species**: Always mention if harmful algal bloom species are present, especially if common. Mark with asterisk.
+5. **Potentially harmful taxa**: Always mention if potentially harmful taxa are present, especially if common. Mark with asterisk.
    - Example: "The toxin producing Dinophysis acuminata* was found in high cell numbers."
    - Example: "Low occurrences of the filamentous cyanobacterium Aphanizomenon flosaquae* were observed."
 
@@ -67,15 +68,29 @@ Each station description follows a consistent pattern:
 - Abbreviate genus on subsequent mentions: "P. calcar-avis"
 - Group-level names are not italicized: "diatoms", "dinoflagellates", "cyanobacteria", "coccolithophores"
 - Higher taxonomic groups: "Cryptomonadales", "Gymnodiniales", "Dictyochales"
-- Mark HAB species with an asterisk (*) after the name
+- Mark potentially harmful taxa with an asterisk (*) after the name
 
-### Text formatting rules
+## Terminology
+
+### Harmful taxa terminology
+- Never use the term "HAB species" or "HAB-arter".
+- In English: say "potentially harmful taxon" (singular) or "potentially harmful taxa" (plural).
+- In Swedish: say "potentiellt skadligt taxon" (singular) or "potentiellt skadliga taxa" (plural). Use "potentiellt skadlig art" only when referring to a specific species.
+
+### Swedish terminology
+When writing in Swedish, use the correct Swedish terms:
+- "klorofyll" (not "chlorophyll")
+- "klorofyllfluorescens" (not "chlorophyll fluorescence")
+- "biovolym" (not "biovolume")
+- "kiselalger" (not "diatomeer" or "diatoméer") for diatoms
+- Use proper Swedish characters: å, ä, ö (e.g. Västerhavet, Östersjön, Kattegatt)
+
+## Text formatting rules
 - Output PLAIN TEXT only. Do NOT use any markdown formatting (no asterisks for emphasis like *italic* or **bold**, no headers with #, no bullet points).
-- The ONLY asterisk allowed is the HAB species marker, placed directly after the species name with no space: Dinophysis acuminata*
-- Use proper Swedish characters (å, ä, ö) when writing in Swedish. For example: Västerhavet, Östersjön, Kattegatt.
+- The ONLY asterisk allowed is the potentially harmful taxon marker, placed directly after the species name with no space: Dinophysis acuminata*
 
 ### What NOT to include
-- Do not include figure captions (these are added manually).
+- Do not include figure captions (these are added separately).
 - Do not include methodology descriptions.
 - Do not make up data or species that are not in the provided data.
 - Do not use exact numerical values for cell counts in the text -- use qualitative descriptions instead (high, low, moderate, abundant, etc.).
@@ -90,7 +105,7 @@ Each station description follows a consistent pattern:
 ### Baltic station example
 "The phytoplankton diversity was low, but total cell numbers were relatively high. The diatom Dactyliosolen fragilissimus was the most abundant species, followed by Cerataulina pelagica and smaller taxa, including cells from the order Gymnodiniales."
 
-### Baltic station with HAB species
+### Baltic station with potentially harmful taxon
 "Phytoplankton diversity and total cell numbers were low. Aphanizomenon flosaquae* and small taxa, including cells from the order Cryptomonadales, were relatively abundant."
 
 ### Station with chlorophyll comparison

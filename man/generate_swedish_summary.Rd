@@ -4,7 +4,12 @@
 \alias{generate_swedish_summary}
 \title{Generate the Swedish summary text}
 \usage{
-generate_swedish_summary(station_summary, taxa_lookup = NULL, cruise_info = "")
+generate_swedish_summary(
+  station_summary,
+  taxa_lookup = NULL,
+  cruise_info = "",
+  provider = NULL
+)
 }
 \arguments{
 \item{station_summary}{Full station_summary data frame.}
@@ -12,6 +17,9 @@ generate_swedish_summary(station_summary, taxa_lookup = NULL, cruise_info = "")
 \item{taxa_lookup}{Optional taxa lookup table.}
 
 \item{cruise_info}{Cruise info string.}
+
+\item{provider}{LLM provider (\code{"openai"} or \code{"gemini"}).
+NULL auto-detects.}
 }
 \value{
 Character string with Swedish summary.

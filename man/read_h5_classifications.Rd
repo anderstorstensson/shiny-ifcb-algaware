@@ -17,5 +17,12 @@ A data.frame with columns: sample_name, roi_number, class_name,
 score.
 }
 \description{
-Reads thresholded class assignments from H5 classification files.
+Reads thresholded class assignments from H5 classification files produced
+by the IFCB neural network classifier. Each H5 file contains:
+\itemize{
+\item \code{roi_numbers}: integer vector of ROI (Region of Interest) IDs
+\item \code{class_name}: character vector of predicted class per ROI
+\item \code{output_scores}: matrix of class probabilities (classes x ROIs);
+the maximum score per ROI is used as the confidence value
+}
 }

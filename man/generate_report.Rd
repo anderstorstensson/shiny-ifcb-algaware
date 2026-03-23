@@ -16,7 +16,11 @@ generate_report(
   classifier_name = NULL,
   use_llm = FALSE,
   annotator = "",
-  image_counts = NULL
+  image_counts = NULL,
+  total_bio_images = NULL,
+  llm_model = NULL,
+  n_station_samples = NULL,
+  llm_provider = NULL
 )
 }
 \arguments{
@@ -47,6 +51,18 @@ introduction statement.}
 
 \item{image_counts}{Optional data frame from \code{fetch_image_counts()}
 with cruise-wide image counts and coordinates for the track map.}
+
+\item{total_bio_images}{Optional integer; total number of biological images
+used in the report (excluding non-biological classes).}
+
+\item{llm_model}{Optional character string; name of the LLM model used for
+text generation (e.g. \code{"gpt-4.1"}).}
+
+\item{n_station_samples}{Optional integer; total number of IFCB samples
+matched to AlgAware stations.}
+
+\item{llm_provider}{Optional character string; LLM provider to use
+(\code{"openai"} or \code{"gemini"}). NULL auto-detects.}
 }
 \value{
 Invisible path to the created document.

@@ -2,13 +2,17 @@ Package: algaware
 Title: Interactive IFCB Phytoplankton Reporting Tool
 Version: 0.1.0
 Authors@R:
-    person("Anders", "Torstensson", , "anders.torstensson@smhi.se", role = c("aut", "cre"))
+    person("Anders", "Torstensson", , "anders.torstensson@smhi.se", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-8283-656X"))
 Description: A Shiny application for processing, validating, and reporting
     phytoplankton data from Imaging FlowCytobot (IFCB) instruments. Integrates
     with IFCB Dashboard for data retrieval, supports interactive validation of
     classifier predictions, and generates Word reports with biomass plots,
     heatmaps, and image mosaics.
 License: MIT + file LICENSE
+URL: https://anderstorstensson.github.io/algaware/,
+    https://github.com/anderstorstensson/algaware
+BugReports: https://github.com/anderstorstensson/algaware/issues
 Depends: R (>= 4.1.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

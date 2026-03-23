@@ -5,3 +5,6 @@
 *.o
 *.so
 *.dll
+docs
+.devcontainer
+.mcp.json

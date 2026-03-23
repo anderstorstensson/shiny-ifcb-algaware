@@ -35,20 +35,34 @@ mod_report_server <- function(id, rv, config) {
     corrections_path <- shiny::reactiveVal(NULL)
 
     output$llm_status <- shiny::renderUI({
-      if (llm_available()) {
+      providers <- llm_providers()
+      if (length(providers) > 0) {
+        provider_labels <- c(
+          openai = paste0("OpenAI (", llm_model_name("openai"), ")"),
+          gemini = paste0("Gemini (", llm_model_name("gemini"), ")")
+        )
+        choices <- stats::setNames(providers, provider_labels[providers])
+        provider_ui <- if (length(providers) > 1) {
+          shiny::selectInput(ns("llm_provider"), "LLM Provider",
+                             choices = choices, selected = providers[1],
+                             width = "220px")
+        } else {
+          shiny::div(
+            class = "llm-status available",
+            shiny::icon("robot"),
+            paste0(" ", provider_labels[providers], " API key detected")
+          )
+        }
         shiny::tagList(
           shiny::checkboxInput(ns("use_llm"), "AI text generation",
                                value = TRUE),
-          shiny::div(
-            class = "llm-status available",
-            shiny::icon("robot"), " API key detected"
-          )
+          provider_ui
         )
       } else {
         shiny::div(
           class = "llm-status unavailable",
           shiny::icon("pencil"),
-          " Manual text mode (set OPENAI_API_KEY for AI text)"
+          " Manual text mode (set OPENAI_API_KEY or GEMINI_API_KEY for AI text)"
         )
       }
     })
@@ -111,12 +125,29 @@ mod_report_server <- function(id, rv, config) {
                                        ".docx"))
 
           use_llm <- llm_available() && isTRUE(input$use_llm)
-
-          shiny::incProgress(0, detail = if (use_llm) {
-            "Generating AI text and building document..."
+          selected_provider <- if (use_llm) {
+            input$llm_provider %||% llm_provider()
           } else {
-            "Building Word document..."
-          })
+            NULL
+          }
+
+          if (!use_llm) {
+            shiny::incProgress(0, detail = "Building Word document...")
+          }
+
+          total_bio <- sum(!rv$classifications$class_name %in% non_bio)
+          n_stn_samples <- length(unique(rv$matched_metadata$pid))
+
+          llm_progress <- if (use_llm) {
+            function(step, total, detail) {
+              shiny::incProgress(
+                0,
+                detail = sprintf("AI text %d/%d: %s", step, total, detail)
+              )
+            }
+          } else {
+            NULL
+          }
 
           generate_report(
             out_file, station_summary,
@@ -127,7 +158,12 @@ mod_report_server <- function(id, rv, config) {
             classifier_name = rv$classifier_name,
             use_llm = use_llm,
             annotator = config$annotator,
-            image_counts = rv$image_counts
+            image_counts = rv$image_counts,
+            total_bio_images = total_bio,
+            llm_model = if (use_llm) llm_model_name(selected_provider) else NULL,
+            n_station_samples = n_stn_samples,
+            llm_provider = selected_provider,
+            on_llm_progress = llm_progress
           )
 
           report_path(out_file)
