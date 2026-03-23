@@ -11,9 +11,9 @@ A Shiny application for processing, validating, and reporting phytoplankton data
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://anderstorstensson.github.io/algaware/}
-  \item \url{https://github.com/anderstorstensson/algaware}
-  \item Report bugs at \url{https://github.com/anderstorstensson/algaware/issues}
+  \item \url{https://anderstorstensson.github.io/shiny-ifcb-algaware/}
+  \item \url{https://github.com/anderstorstensson/shiny-ifcb-algaware}
+  \item Report bugs at \url{https://github.com/anderstorstensson/shiny-ifcb-algaware/issues}
 }
 
 }

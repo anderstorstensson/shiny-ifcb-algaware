@@ -9,7 +9,8 @@ add_station_sections(
   station_summary,
   taxa_lookup = NULL,
   use_llm = FALSE,
-  llm_provider = NULL
+  llm_provider = NULL,
+  on_llm_progress = NULL
 )
 }
 \description{

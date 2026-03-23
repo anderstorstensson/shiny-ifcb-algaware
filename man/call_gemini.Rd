@@ -25,7 +25,8 @@ Character string with the generated text.
 }
 \description{
 Uses Google's OpenAI-compatible chat completions endpoint. Includes a
-rate-limit delay to stay within the free tier (15 RPM for Flash,
-10 RPM for Pro).
+rate-limit delay to stay within the free tier (5 RPM for Pro, 15 RPM
+for Flash). On 429 responses, waits and retries up to 3 times with
+increasing backoff.
 }
 \keyword{internal}

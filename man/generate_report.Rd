@@ -20,7 +20,8 @@ generate_report(
   total_bio_images = NULL,
   llm_model = NULL,
   n_station_samples = NULL,
-  llm_provider = NULL
+  llm_provider = NULL,
+  on_llm_progress = NULL
 )
 }
 \arguments{
@@ -63,6 +64,10 @@ matched to AlgAware stations.}
 
 \item{llm_provider}{Optional character string; LLM provider to use
 (\code{"openai"} or \code{"gemini"}). NULL auto-detects.}
+
+\item{on_llm_progress}{Optional callback function called before each LLM
+request with arguments \code{(step, total, detail)} for progress
+reporting.}
 }
 \value{
 Invisible path to the created document.
