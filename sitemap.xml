@@ -14,6 +14,7 @@
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/apply_invalidation.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/assign_station_visits.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/build_cruise_info.html</loc></url>
+<url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/build_relabel_choices.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/build_sample_counts.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/call_gemini.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/call_llm.html</loc></url>
@@ -71,6 +72,7 @@
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/load_taxa_lookup.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/load_writing_guide.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/match_bins_to_stations.html</loc></url>
+<url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/merge_custom_taxa.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/merge_ferrybox_data.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/mod_data_loader_server.html</loc></url>
 <url><loc>https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/mod_data_loader_ui.html</loc></url>

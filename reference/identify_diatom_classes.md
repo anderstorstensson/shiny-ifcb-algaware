@@ -9,7 +9,7 @@ can apply the correct formula.
 ## Usage
 
 ``` r
-identify_diatom_classes(taxa_lookup)
+identify_diatom_classes(taxa_lookup, custom_classes = NULL)
 ```
 
 ## Arguments
