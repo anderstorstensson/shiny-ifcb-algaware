@@ -18,6 +18,9 @@ NULL
 #' @return An \code{officer::fpar} object.
 #' @keywords internal
 format_report_paragraph <- function(text, taxa_lookup = NULL) {
+  # Font properties for the Word report. Adobe Garamond Pro is the standard
+  # font used in SMHI AlgAware publications. If not installed, Word will
+  # substitute a similar serif font.
   normal_prop <- officer::fp_text(font.size = 11, font.family = "Adobe Garamond Pro")
   italic_prop <- officer::fp_text(font.size = 11, italic = TRUE, font.family = "Adobe Garamond Pro")
   red_prop <- officer::fp_text(font.size = 11, color = "red", bold = TRUE, font.family = "Adobe Garamond Pro")
@@ -128,10 +131,56 @@ add_formatted_par <- function(doc, text, taxa_lookup = NULL,
 
 #' Check if LLM text generation is available
 #'
-#' @return TRUE if OPENAI_API_KEY is set, FALSE otherwise.
+#' @return TRUE if OPENAI_API_KEY or GEMINI_API_KEY is set, FALSE otherwise.
 #' @export
 llm_available <- function() {
-  nzchar(Sys.getenv("OPENAI_API_KEY", ""))
+  nzchar(Sys.getenv("OPENAI_API_KEY", "")) ||
+    nzchar(Sys.getenv("GEMINI_API_KEY", ""))
+}
+
+#' List available LLM providers
+#'
+#' @return Character vector of provider names with valid API keys.
+#' @export
+llm_providers <- function() {
+  providers <- character(0)
+  if (nzchar(Sys.getenv("OPENAI_API_KEY", ""))) {
+    providers <- c(providers, "openai")
+  }
+  if (nzchar(Sys.getenv("GEMINI_API_KEY", ""))) {
+    providers <- c(providers, "gemini")
+  }
+  providers
+}
+
+#' Detect the default LLM provider
+#'
+#' @return Character string: \code{"openai"}, \code{"gemini"}, or \code{"none"}.
+#'   When both keys are set, OpenAI is preferred.
+#' @export
+llm_provider <- function() {
+  providers <- llm_providers()
+  if (length(providers) == 0) return("none")
+  providers[1]
+}
+
+#' Get the model name for a provider
+#'
+#' Uses the environment variable \code{OPENAI_MODEL} or \code{GEMINI_MODEL}
+#' if set, otherwise falls back to built-in defaults.
+#'
+#' @param provider Character string: \code{"openai"} or \code{"gemini"}.
+#'   Defaults to the active provider.
+#' @return Character string with the model name.
+#' @export
+llm_model_name <- function(provider = llm_provider()) {
+  defaults <- c(openai = "gpt-4.1", gemini = "gemini-2.5-flash")
+  env_vars <- c(openai = "OPENAI_MODEL", gemini = "GEMINI_MODEL")
+
+  if (!provider %in% names(defaults)) return("none")
+
+  env_val <- Sys.getenv(env_vars[[provider]], "")
+  if (nzchar(env_val)) env_val else defaults[[provider]]
 }
 
 #' Load the report writing guide
@@ -299,12 +348,14 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
 #'
 #' @param system_prompt System prompt string.
 #' @param user_prompt User prompt string.
-#' @param model Model name (default: "gpt-4.1").
-#' @param temperature Sampling temperature (default: 0.3).
+#' @param model OpenAI model name (default: "gpt-4.1").
+#' @param temperature Sampling temperature (default: 0.3). Lower values
+#'   produce more deterministic, factual output; higher values are more
+#'   creative. 0.3 is a good balance for scientific report text.
 #' @return Character string with the generated text.
 #' @keywords internal
 call_openai <- function(system_prompt, user_prompt,
-                        model = "gpt-4.1",
+                        model = llm_model_name("openai"),
                         temperature = 0.3) {
   api_key <- Sys.getenv("OPENAI_API_KEY", "")
   if (!nzchar(api_key)) {
@@ -320,6 +371,8 @@ call_openai <- function(system_prompt, user_prompt,
     )
   )
 
+  # 120s timeout because report text generation can be slow for long prompts.
+  # Retries twice with 5s backoff to handle transient API errors.
   resp <- httr2::request("https://api.openai.com/v1/chat/completions") |>
     httr2::req_headers(
       Authorization = paste("Bearer", api_key),
@@ -333,6 +386,100 @@ call_openai <- function(system_prompt, user_prompt,
   result <- httr2::resp_body_json(resp)
   text <- result$choices[[1]]$message$content
   strip_markdown(text)
+}
+
+#' Call the Gemini API (OpenAI-compatible endpoint)
+#'
+#' Uses Google's OpenAI-compatible chat completions endpoint. Includes a
+#' rate-limit delay to stay within the free tier (5 RPM for Pro, 15 RPM
+#' for Flash). On 429 responses, waits and retries up to 3 times with
+#' increasing backoff.
+#'
+#' @param system_prompt System prompt string.
+#' @param user_prompt User prompt string.
+#' @param model Gemini model name (default: "gemini-2.5-pro").
+#' @param temperature Sampling temperature (default: 0.3).
+#' @return Character string with the generated text.
+#' @keywords internal
+call_gemini <- function(system_prompt, user_prompt,
+                        model = llm_model_name("gemini"),
+                        temperature = 0.3) {
+  api_key <- Sys.getenv("GEMINI_API_KEY", "")
+  if (!nzchar(api_key)) {
+    stop("GEMINI_API_KEY environment variable is not set.", call. = FALSE)
+  }
+
+  body <- list(
+    model = model,
+    temperature = temperature,
+    messages = list(
+      list(role = "system", content = system_prompt),
+      list(role = "user", content = user_prompt)
+    )
+  )
+
+  # Rate-limit delay: Gemini free tier allows 5 RPM for 2.5 Pro (one
+  # request per 12s). Default 15s provides margin for variable response
+  # times. Override with options(algaware.gemini_delay = <seconds>).
+  gemini_delay <- getOption("algaware.gemini_delay", 15)
+  last_call <- .llm_state$gemini_last_call
+  if (!is.null(last_call)) {
+    elapsed <- as.numeric(difftime(Sys.time(), last_call, units = "secs"))
+    if (elapsed < gemini_delay) {
+      Sys.sleep(gemini_delay - elapsed)
+    }
+  }
+
+  .llm_state$gemini_last_call <- Sys.time()
+
+  resp <- httr2::request("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions") |>
+    httr2::req_headers(
+      Authorization = paste("Bearer", api_key),
+      `Content-Type` = "application/json"
+    ) |>
+    httr2::req_body_json(body) |>
+    httr2::req_timeout(180) |>
+    httr2::req_retry(
+      max_tries = 2,
+      is_transient = \(resp) httr2::resp_status(resp) == 429,
+      backoff = \(attempt) gemini_delay * attempt
+    ) |>
+    httr2::req_perform()
+
+  .llm_state$gemini_last_call <- Sys.time()
+
+  result <- httr2::resp_body_json(resp)
+  text <- result$choices[[1]]$message$content
+  strip_markdown(text)
+}
+
+# Package-level mutable state for rate limiting (environment, not exported)
+.llm_state <- new.env(parent = emptyenv())
+.llm_state$gemini_last_call <- NULL
+
+#' Call an LLM provider
+#'
+#' Dispatches to \code{call_openai} or \code{call_gemini}. When
+#' \code{provider} is NULL, auto-detects from available API keys.
+#'
+#' @param system_prompt System prompt string.
+#' @param user_prompt User prompt string.
+#' @param provider Character string: \code{"openai"} or \code{"gemini"}.
+#'   NULL (default) auto-detects.
+#' @param temperature Sampling temperature (default: 0.3).
+#' @return Character string with the generated text.
+#' @keywords internal
+call_llm <- function(system_prompt, user_prompt, provider = NULL,
+                     temperature = 0.3) {
+  if (is.null(provider)) provider <- llm_provider()
+  switch(provider,
+    openai = call_openai(system_prompt, user_prompt,
+                         temperature = temperature),
+    gemini = call_gemini(system_prompt, user_prompt,
+                         temperature = temperature),
+    stop("No LLM API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY.",
+         call. = FALSE)
+  )
 }
 
 #' Strip markdown formatting from LLM output
@@ -358,10 +505,12 @@ strip_markdown <- function(text) {
 #' @param station_summary Full station_summary data frame.
 #' @param taxa_lookup Optional taxa lookup table.
 #' @param cruise_info Cruise info string.
+#' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
+#'   NULL auto-detects.
 #' @return Character string with Swedish summary.
 #' @export
 generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "") {
+                                     cruise_info = "", provider = NULL) {
   guide <- load_writing_guide()
   cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup)
 
@@ -376,25 +525,14 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
     "Write the Swedish summary (Sammanfattning) for this AlgAware cruise report.\n\n",
     "Cruise: ", cruise_info, "\n\n",
     "Station data overview:\n", cruise_data, "\n\n",
-    "Write the summary in Swedish, using one paragraph per region ",
-    "(West Coast and Baltic Sea), clearly separated. Follow the style described in the ",
-    "writing guide. Mark potentially harmful taxa (potentiellt skadliga taxa) ",
-    "with an asterisk (*). Never use the term 'HAB species' or 'HAB-arter'; ",
-    "say 'potentiellt skadligt taxon' (singular) or 'potentiellt skadliga taxa' ",
-    "(plural) instead. Use 'potentiellt skadlig art' only when referring to a ",
-    "specific species. ",
-    "Use correct Swedish terminology: 'klorofyll' (not 'chlorophyll'), ",
-    "'klorofyllfluorescens' (not 'chlorophyll fluorescence'), ",
-    "'biovolym' (not 'biovolume'), ",
-    "'kiselalger' (not 'diatoméer' or 'diatomeer') for diatoms. ",
-    "Compare klorofyllfluorescens between stations and relate it to the ",
-    "IFCB biovolume data where relevant. ",
-    "Output ONLY the summary text, no headings. ",
+    "Write in Swedish. Follow the writing guide exactly, including the ",
+    "Swedish terminology and harmful taxa terminology sections. ",
+    "Output ONLY the summary text, no headings or extra commentary. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
-    "The only asterisk allowed is the HAB marker directly after a species name."
+    "The only asterisk allowed is the harmful taxon marker directly after a species name."
   )
 
-  call_openai(system_prompt, user_prompt)
+  call_llm(system_prompt, user_prompt, provider = provider)
 }
 
 #' Generate the English summary text
@@ -402,10 +540,12 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param station_summary Full station_summary data frame.
 #' @param taxa_lookup Optional taxa lookup table.
 #' @param cruise_info Cruise info string.
+#' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
+#'   NULL auto-detects.
 #' @return Character string with English summary.
 #' @export
 generate_english_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "") {
+                                     cruise_info = "", provider = NULL) {
   guide <- load_writing_guide()
   cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup)
 
@@ -420,19 +560,14 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
     "Write the English summary (Abstract) for this AlgAware cruise report.\n\n",
     "Cruise: ", cruise_info, "\n\n",
     "Station data overview:\n", cruise_data, "\n\n",
-    "Write the summary in English, using one paragraph per region ",
-    "(West Coast and Baltic Sea), clearly separated. Follow the style described in the ",
-    "writing guide. Mark potentially harmful taxa with an asterisk (*). ",
-    "Never use the term 'HAB species'; say 'potentially harmful taxon' ",
-    "(singular) or 'potentially harmful taxa' (plural) instead. ",
-    "Compare chlorophyll fluorescence between stations and relate it to the ",
-    "IFCB biovolume data where relevant. ",
-    "Output ONLY the summary text, no headings. ",
+    "Write in English. Follow the writing guide exactly, including the ",
+    "harmful taxa terminology section. ",
+    "Output ONLY the summary text, no headings or extra commentary. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
-    "The only asterisk allowed is the marker directly after a species name."
+    "The only asterisk allowed is the harmful taxon marker directly after a species name."
   )
 
-  call_openai(system_prompt, user_prompt)
+  call_llm(system_prompt, user_prompt, provider = provider)
 }
 
 #' Generate a station description
@@ -440,30 +575,38 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param station_data Data frame with station_summary rows for one visit.
 #' @param taxa_lookup Optional taxa lookup table.
 #' @param all_stations_summary Optional full station_summary for context.
+#' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
+#'   NULL auto-detects.
 #' @return Character string with station description in English.
 #' @export
 generate_station_description <- function(station_data, taxa_lookup = NULL,
-                                         all_stations_summary = NULL) {
+                                         all_stations_summary = NULL,
+                                         provider = NULL) {
   guide <- load_writing_guide()
   station_text <- format_station_data_for_prompt(station_data, taxa_lookup)
 
-  # Provide brief context about other stations for comparison
+  # Provide cruise-wide context so the LLM can make relative statements
   context <- ""
   if (!is.null(all_stations_summary)) {
-    visits <- unique(all_stations_summary[, c("visit_id",
-                                               "STATION_NAME_SHORT", "COAST")])
-    same_coast <- visits[visits$COAST == station_data$COAST[1], ]
-    if (nrow(same_coast) > 1) {
-      other_bv <- vapply(same_coast$visit_id, function(vid) {
-        d <- all_stations_summary[all_stations_summary$visit_id == vid, ]
-        sum(d$biovolume_mm3_per_liter, na.rm = TRUE)
-      }, numeric(1))
-      names(other_bv) <- same_coast$STATION_NAME_SHORT
-      context <- paste0(
-        "\nRegional context - total biovolume (mm3/L) at nearby stations:\n",
-        paste(sprintf("  %s: %.4f", names(other_bv), other_bv), collapse = "\n")
-      )
-    }
+    all_visits <- unique(all_stations_summary[, c("visit_id",
+                                                   "STATION_NAME_SHORT",
+                                                   "COAST")])
+    context_lines <- vapply(seq_len(nrow(all_visits)), function(i) {
+      vid <- all_visits$visit_id[i]
+      d <- all_stations_summary[all_stations_summary$visit_id == vid, ]
+      n_taxa <- nrow(d)
+      total_counts <- sum(d$counts_per_liter, na.rm = TRUE)
+      total_bv <- sum(d$biovolume_mm3_per_liter, na.rm = TRUE)
+      region <- if (all_visits$COAST[i] == "EAST") "Baltic" else "West"
+      current <- if (vid == unique(station_data$visit_id)[1]) " <-- this station" else ""
+      sprintf("  %s (%s): %d taxa, %.0f counts/L, %.4f mm3/L biovolume%s",
+              all_visits$STATION_NAME_SHORT[i], region,
+              n_taxa, total_counts, total_bv, current)
+    }, character(1))
+    context <- paste0(
+      "\n\nCruise context -- compare this station relative to the others:\n",
+      paste(context_lines, collapse = "\n")
+    )
   }
 
   system_prompt <- paste0(
@@ -477,16 +620,16 @@ generate_station_description <- function(station_data, taxa_lookup = NULL,
     "Write a station description for the following station visit.\n\n",
     station_text,
     context,
-    "\n\nWrite 3-6 sentences in English describing the phytoplankton community ",
-    "at this station. Follow the station description style in the writing guide. ",
-    "Always mention potentially harmful taxa (marked [HAB]) if present, flagged with *. ",
-    "Never use the term 'HAB species'; say 'potentially harmful taxon/taxa' instead. ",
-    "Compare chlorophyll fluorescence with IFCB biovolume if chlorophyll data ",
-    "is available. ",
+    "\n\nWrite in English. Follow the station description pattern and ",
+    "harmful taxa terminology in the writing guide exactly. ",
+    "Base your characterization of diversity (high/moderate/low) and abundance ",
+    "(high/moderate/low) on the cruise context data above -- describe this station ",
+    "relative to the other stations visited during this cruise. ",
+    "Taxa marked [HAB] in the data are potentially harmful and must be mentioned. ",
     "Output ONLY the description text, no headings or station name. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
-    "The only asterisk allowed is the HAB marker directly after a species name."
+    "The only asterisk allowed is the harmful taxon marker directly after a species name."
   )
 
-  call_openai(system_prompt, user_prompt)
+  call_llm(system_prompt, user_prompt, provider = provider)
 }

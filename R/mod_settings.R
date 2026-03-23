@@ -204,7 +204,12 @@ mod_settings_server <- function(id, config) {
       )
     })
 
-    # Remove extra station (dynamic buttons)
+    # Remove extra station.
+    # The remove buttons use an onclick handler that calls
+    # Shiny.setInputValue() directly from JavaScript (see extra_stations_list
+    # renderer below). This is a common Shiny pattern for dynamic lists where
+    # each item needs its own action button: instead of observing N separate
+    # button IDs, we funnel all clicks into a single input with the item index.
     shiny::observeEvent(input$remove_station, {
       idx <- input$remove_station
       existing <- config$extra_stations
@@ -240,6 +245,9 @@ mod_settings_server <- function(id, config) {
             shiny::span(style = "color: #666;",
               paste0(" (", s$STATION_NAME, ", ", s$COAST, ")"))
           ),
+          # Each remove button uses onclick to call Shiny.setInputValue()
+          # with the station index. {priority: 'event'} forces Shiny to
+          # treat repeated clicks on the same index as new events.
           shiny::actionButton(
             ns(paste0("remove_station_", i)), "",
             icon = shiny::icon("xmark"),

@@ -19,6 +19,17 @@
 #'   introduction statement.
 #' @param image_counts Optional data frame from \code{fetch_image_counts()}
 #'   with cruise-wide image counts and coordinates for the track map.
+#' @param total_bio_images Optional integer; total number of biological images
+#'   used in the report (excluding non-biological classes).
+#' @param llm_model Optional character string; name of the LLM model used for
+#'   text generation (e.g. \code{"gpt-4.1"}).
+#' @param n_station_samples Optional integer; total number of IFCB samples
+#'   matched to AlgAware stations.
+#' @param llm_provider Optional character string; LLM provider to use
+#'   (\code{"openai"} or \code{"gemini"}). NULL auto-detects.
+#' @param on_llm_progress Optional callback function called before each LLM
+#'   request with arguments \code{(step, total, detail)} for progress
+#'   reporting.
 #' @return Invisible path to the created document.
 #' @export
 generate_report <- function(output_path, station_summary,
@@ -30,7 +41,12 @@ generate_report <- function(output_path, station_summary,
                             classifier_name = NULL,
                             use_llm = FALSE,
                             annotator = "",
-                            image_counts = NULL) {
+                            image_counts = NULL,
+                            total_bio_images = NULL,
+                            llm_model = NULL,
+                            n_station_samples = NULL,
+                            llm_provider = NULL,
+                            on_llm_progress = NULL) {
   template <- system.file("templates", "report_template.docx",
                           package = "algaware")
   if (!nzchar(template)) {
@@ -55,22 +71,20 @@ generate_report <- function(output_path, station_summary,
   # Title
   doc <- officer::body_add_par(doc, "AlgAware Report", style = "heading 1")
   doc <- officer::body_add_par(doc, cruise_info, style = "Normal")
-  if (!is.null(classifier_name) && nzchar(classifier_name)) {
-    doc <- officer::body_add_par(
-      doc,
-      paste0("Classifier: ", classifier_name),
-      style = "Normal"
-    )
-  }
   doc <- officer::body_add_par(doc, "")
 
   # Introduction
   intro <- paste0(
     "This report is based on images collected by an Imaging FlowCytobot ",
     "(IFCB) onboard R/V Svea. Samples are collected continuously ",
-    "approximately every 25 minutes from surface water at the ship's ",
-    "water intake for the FerryBox system. In this report we summarize ",
-    "the findings from selected monitoring stations. ",
+    "approximately every 25 minutes from surface water at the ship\u2019s ",
+    "water intake for the FerryBox system. The water passes through a ",
+    "150 \u00b5m mesh filter before reaching the IFCB, which generally ",
+    "excludes larger organisms. The instrument ",
+    "triggers image capture on chlorophyll fluorescence, which means that ",
+    "heterotrophic organisms and other non-chlorophyll-containing cells ",
+    "may be underrepresented. In this report we summarize the findings ",
+    "from selected monitoring stations. ",
     "Phytoplankton identification is based on ",
     "automated image classification by an AI model, validated by ",
     if (nzchar(annotator)) paste0(annotator, ", SMHI") else "SMHI",
@@ -87,12 +101,25 @@ generate_report <- function(output_path, station_summary,
   doc <- officer::body_add_par(doc, intro, style = "Normal")
   doc <- officer::body_add_par(doc, "")
 
+  # Count total LLM steps for progress reporting
+  n_stations <- length(unique(station_summary$visit_id))
+  llm_total <- 2L + n_stations  # Swedish + English + per-station
+  llm_step <- 0L
+  report_progress <- function(detail) {
+    llm_step <<- llm_step + 1L
+    if (is.function(on_llm_progress)) {
+      on_llm_progress(llm_step, llm_total, detail)
+    }
+  }
+
   # Swedish summary
   doc <- officer::body_add_par(doc, "Sammanfattning", style = "heading 2")
   swedish_text <- "[Skriv sammanfattning pa svenska har.]"
   if (use_llm) {
+    report_progress("Swedish summary")
     swedish_text <- tryCatch(
-      generate_swedish_summary(station_summary, taxa_lookup, cruise_info),
+      generate_swedish_summary(station_summary, taxa_lookup, cruise_info,
+                               provider = llm_provider),
       error = function(e) {
         warning("LLM Swedish summary failed: ", e$message, call. = FALSE)
         "[Skriv sammanfattning pa svenska har. (LLM generation failed)]"
@@ -106,8 +133,10 @@ generate_report <- function(output_path, station_summary,
   doc <- officer::body_add_par(doc, "Summary", style = "heading 2")
   english_text <- "[Write English summary here.]"
   if (use_llm) {
+    report_progress("English summary")
     english_text <- tryCatch(
-      generate_english_summary(station_summary, taxa_lookup, cruise_info),
+      generate_english_summary(station_summary, taxa_lookup, cruise_info,
+                               provider = llm_provider),
       error = function(e) {
         warning("LLM English summary failed: ", e$message, call. = FALSE)
         "[Write English summary here. (LLM generation failed)]"
@@ -116,6 +145,51 @@ generate_report <- function(output_path, station_summary,
   }
   doc <- add_formatted_par(doc, english_text, taxa_lookup, style = "Normal")
   doc <- officer::body_add_par(doc, "")
+
+  # Summary table
+  summary_rows <- data.frame(
+    Parameter = character(0), Value = character(0),
+    stringsAsFactors = FALSE
+  )
+  if (!is.null(image_counts) && nrow(image_counts) > 0) {
+    summary_rows <- rbind(summary_rows, data.frame(
+      Parameter = "Total samples collected (cruise)",
+      Value = as.character(nrow(image_counts)),
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (!is.null(n_station_samples)) {
+    summary_rows <- rbind(summary_rows, data.frame(
+      Parameter = "Samples from AlgAware stations",
+      Value = as.character(n_station_samples),
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (!is.null(total_bio_images)) {
+    summary_rows <- rbind(summary_rows, data.frame(
+      Parameter = "Biological images analysed",
+      Value = format(total_bio_images, big.mark = ","),
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (!is.null(classifier_name) && nzchar(classifier_name)) {
+    summary_rows <- rbind(summary_rows, data.frame(
+      Parameter = "Classification model (PyTorch)",
+      Value = classifier_name,
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (!is.null(llm_model) && nzchar(llm_model)) {
+    summary_rows <- rbind(summary_rows, data.frame(
+      Parameter = "LLM model (text generation)",
+      Value = llm_model,
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (nrow(summary_rows) > 0) {
+    doc <- officer::body_add_table(doc, summary_rows, style = "table_template")
+    doc <- officer::body_add_par(doc, "")
+  }
 
   # Maps
   doc <- officer::body_add_par(doc, "Maps", style = "heading 2")
@@ -126,10 +200,13 @@ generate_report <- function(output_path, station_summary,
     img_map <- create_image_count_map(image_counts)
     doc <- add_plot_to_doc(doc, img_map, cleanup,
       width = 7, height = 5, display_width = 6, display_height = 4.3)
+    total_images <- format(sum(image_counts$n_images, na.rm = TRUE),
+                           big.mark = ",")
     doc <- officer::body_add_par(
       doc,
       paste0("Figure ", fig_num,
-             ". IFCB image counts along the cruise track."),
+             ". IFCB image counts along the cruise track. ",
+             "Total images collected: ", total_images, "."),
       style = "Normal"
     )
     doc <- officer::body_add_par(doc, "")
@@ -162,14 +239,17 @@ generate_report <- function(output_path, station_summary,
   doc <- officer::body_add_par(doc, "")
   fig_num <- fig_num + 1L
 
+  # Build sample counts per station_date for heatmap labels
+  sample_counts <- build_sample_counts(station_summary)
+
   # Heatmaps and stacked bars
   result <- add_heatmap_section(doc, baltic_wide, taxa_lookup, "Baltic Sea",
-                                fig_num, cleanup)
+                                fig_num, cleanup, sample_counts)
   doc <- result$doc
   fig_num <- result$fig_num
 
   result <- add_heatmap_section(doc, westcoast_wide, taxa_lookup, "West Coast",
-                                fig_num, cleanup)
+                                fig_num, cleanup, sample_counts)
   doc <- result$doc
   fig_num <- result$fig_num
 
@@ -184,7 +264,9 @@ generate_report <- function(output_path, station_summary,
   fig_num <- result$fig_num
 
   # Station sections
-  doc <- add_station_sections(doc, station_summary, taxa_lookup, use_llm)
+  doc <- add_station_sections(doc, station_summary, taxa_lookup, use_llm,
+                               llm_provider = llm_provider,
+                               on_llm_progress = report_progress)
 
   # Image mosaics
   hab_species <- get_hab_species(taxa_lookup)
@@ -216,14 +298,31 @@ add_plot_to_doc <- function(doc, plot, cleanup,
   officer::body_add_img(doc, f, width = display_width, height = display_height)
 }
 
+#' Build a named vector of sample counts per station_date
+#'
+#' @param station_summary Aggregated station data with \code{STATION_NAME_SHORT},
+#'   \code{visit_date}, and \code{n_samples} columns.
+#' @return Named integer vector mapping station_date strings to sample counts,
+#'   or NULL if \code{n_samples} is not available.
+#' @keywords internal
+build_sample_counts <- function(station_summary) {
+  if (!"n_samples" %in% names(station_summary)) return(NULL)
+  visits <- unique(station_summary[, c("STATION_NAME_SHORT", "visit_date",
+                                        "n_samples")])
+  keys <- paste(visits$STATION_NAME_SHORT, visits$visit_date, sep = "_")
+  counts <- as.integer(visits$n_samples)
+  stats::setNames(counts, keys)
+}
+
 #' Add a heatmap section to the report
 #' @keywords internal
 add_heatmap_section <- function(doc, wide_data, taxa_lookup, title,
-                                fig_num, cleanup) {
+                                fig_num, cleanup, sample_counts = NULL) {
   if (nrow(wide_data) > 0 && ncol(wide_data) > 1) {
     doc <- officer::body_add_par(doc, paste(title, "- Biovolume Heatmap"),
                                  style = "heading 2")
-    hm <- create_heatmap(wide_data, taxa_lookup = taxa_lookup)
+    hm <- create_heatmap(wide_data, taxa_lookup = taxa_lookup,
+                          sample_counts = sample_counts)
     hm_file <- tempfile(fileext = ".png")
     hm_height <- max(4, min(12, nrow(wide_data) * 0.25 + 2))
     ggplot2::ggsave(hm_file, hm, width = 8, height = hm_height, dpi = 300)
@@ -269,7 +368,9 @@ add_stacked_bar_section <- function(doc, wide_data, taxa_lookup, title,
 #' Add station report sections to document
 #' @keywords internal
 add_station_sections <- function(doc, station_summary,
-                                 taxa_lookup = NULL, use_llm = FALSE) {
+                                 taxa_lookup = NULL, use_llm = FALSE,
+                                 llm_provider = NULL,
+                                 on_llm_progress = NULL) {
   doc <- officer::body_add_par(doc, "Station Reports", style = "heading 2")
 
   visits <- unique(station_summary[, c("STATION_NAME", "STATION_NAME_SHORT",
@@ -291,11 +392,15 @@ add_station_sections <- function(doc, station_summary,
 
     description <- "[Write station description here.]"
     if (use_llm) {
+      if (is.function(on_llm_progress)) {
+        on_llm_progress(visits$STATION_NAME_SHORT[i])
+      }
       station_data <- station_summary[
         station_summary$visit_id == visits$visit_id[i], ]
       description <- tryCatch(
         generate_station_description(station_data, taxa_lookup,
-                                     station_summary),
+                                     station_summary,
+                                     provider = llm_provider),
         error = function(e) {
           warning("LLM station description failed for ",
                   visits$STATION_NAME_SHORT[i], ": ", e$message,

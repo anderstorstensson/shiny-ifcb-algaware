@@ -4,7 +4,12 @@
 \alias{create_heatmap}
 \title{Create a heatmap of biovolume by species and station}
 \usage{
-create_heatmap(wide_summary, taxa_lookup = NULL, title = "")
+create_heatmap(
+  wide_summary,
+  taxa_lookup = NULL,
+  title = "",
+  sample_counts = NULL
+)
 }
 \arguments{
 \item{wide_summary}{Wide-format data from \code{create_wide_summary()}.}
@@ -13,6 +18,10 @@ create_heatmap(wide_summary, taxa_lookup = NULL, title = "")
 provided, HAB species are annotated with a red asterisk on the y-axis.}
 
 \item{title}{Plot title.}
+
+\item{sample_counts}{Optional named integer vector mapping station_date
+column names to number of samples. If provided, \code{n = X} is appended
+to each x-axis label.}
 }
 \value{
 A ggplot object.

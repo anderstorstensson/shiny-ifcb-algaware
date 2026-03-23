@@ -4,16 +4,23 @@
 \alias{call_openai}
 \title{Call the OpenAI API}
 \usage{
-call_openai(system_prompt, user_prompt, model = "gpt-4.1", temperature = 0.3)
+call_openai(
+  system_prompt,
+  user_prompt,
+  model = llm_model_name("openai"),
+  temperature = 0.3
+)
 }
 \arguments{
 \item{system_prompt}{System prompt string.}
 
 \item{user_prompt}{User prompt string.}
 
-\item{model}{Model name (default: "gpt-4.1").}
+\item{model}{OpenAI model name (default: "gpt-4.1").}
 
-\item{temperature}{Sampling temperature (default: 0.3).}
+\item{temperature}{Sampling temperature (default: 0.3). Lower values
+produce more deterministic, factual output; higher values are more
+creative. 0.3 is a good balance for scientific report text.}
 }
 \value{
 Character string with the generated text.

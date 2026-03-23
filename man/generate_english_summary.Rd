@@ -4,7 +4,12 @@
 \alias{generate_english_summary}
 \title{Generate the English summary text}
 \usage{
-generate_english_summary(station_summary, taxa_lookup = NULL, cruise_info = "")
+generate_english_summary(
+  station_summary,
+  taxa_lookup = NULL,
+  cruise_info = "",
+  provider = NULL
+)
 }
 \arguments{
 \item{station_summary}{Full station_summary data frame.}
@@ -12,6 +17,9 @@ generate_english_summary(station_summary, taxa_lookup = NULL, cruise_info = "")
 \item{taxa_lookup}{Optional taxa lookup table.}
 
 \item{cruise_info}{Cruise info string.}
+
+\item{provider}{LLM provider (\code{"openai"} or \code{"gemini"}).
+NULL auto-detects.}
 }
 \value{
 Character string with English summary.

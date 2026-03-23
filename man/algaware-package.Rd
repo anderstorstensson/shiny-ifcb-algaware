@@ -8,8 +8,17 @@
 \description{
 A Shiny application for processing, validating, and reporting phytoplankton data from Imaging FlowCytobot (IFCB) instruments. Integrates with IFCB Dashboard for data retrieval, supports interactive validation of classifier predictions, and generates Word reports with biomass plots, heatmaps, and image mosaics.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://anderstorstensson.github.io/algaware/}
+  \item \url{https://github.com/anderstorstensson/algaware}
+  \item Report bugs at \url{https://github.com/anderstorstensson/algaware/issues}
+}
+
+}
 \author{
-\strong{Maintainer}: Anders Torstensson \email{anders.torstensson@smhi.se}
+\strong{Maintainer}: Anders Torstensson \email{anders.torstensson@smhi.se} (\href{https://orcid.org/0000-0002-8283-656X}{ORCID})
 
 }
 \keyword{internal}

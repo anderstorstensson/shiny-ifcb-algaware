@@ -132,9 +132,13 @@ create_image_count_map <- function(image_counts) {
 #' @param taxa_lookup Optional taxa lookup table with \code{HAB} column. If
 #'   provided, HAB species are annotated with a red asterisk on the y-axis.
 #' @param title Plot title.
+#' @param sample_counts Optional named integer vector mapping station_date
+#'   column names to number of samples. If provided, \code{n = X} is appended
+#'   to each x-axis label.
 #' @return A ggplot object.
 #' @export
-create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "") {
+create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "",
+                           sample_counts = NULL) {
   station_date_order <- names(wide_summary)[-1]
 
   long_data <- tidyr::pivot_longer(
@@ -183,7 +187,18 @@ create_heatmap <- function(wide_summary, taxa_lookup = NULL, title = "") {
   )) +
     ggplot2::geom_tile(color = "white") +
     ggplot2::scale_x_discrete(
-      labels = function(x) sub("_", "\n", x)
+      labels = function(x) {
+        base <- sub("_", "\n", x)
+        if (!is.null(sample_counts)) {
+          n <- sample_counts[x]
+          base <- ifelse(
+            !is.na(n),
+            paste0(base, "\nn = ", n),
+            base
+          )
+        }
+        base
+      }
     ) +
     ggplot2::scale_y_discrete(labels = display_labels) +
     ggplot2::scale_fill_viridis_c(option = "viridis", na.value = "grey90") +

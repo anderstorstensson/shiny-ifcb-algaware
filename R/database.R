@@ -56,8 +56,9 @@ init_db_schema <- function(con) {
     )
   ")
 
-  # Migration: add is_manual column to existing databases
-
+  # Schema migration: older databases (pre-AlgAware) may lack the is_manual
+  # column. This check runs every time a connection is opened, which is safe
+  # because ALTER TABLE ADD COLUMN is a no-op if the column already exists.
   cols <- DBI::dbGetQuery(con, "PRAGMA table_info(annotations)")
   if (!"is_manual" %in% cols$name) {
     DBI::dbExecute(con,
@@ -103,7 +104,9 @@ save_annotations_db <- function(db_path, annotations, annotator = "",
   tryCatch({
     DBI::dbExecute(con, "BEGIN TRANSACTION")
 
-    # Upsert annotations using prepared statement
+    # Upsert annotations: INSERT OR REPLACE inserts new rows or overwrites
+    # existing ones matching the PRIMARY KEY (sample_name, roi_number).
+    # This means re-annotating the same image updates the record.
     stmt <- DBI::dbSendStatement(con, "
       INSERT OR REPLACE INTO annotations
         (sample_name, roi_number, class_name, annotator, timestamp, is_manual)

@@ -1,6 +1,10 @@
 #' Data Loader Module UI
 #'
-#' @param id Module namespace ID.
+#' Sidebar controls for selecting a cruise or date range and loading data.
+#'
+#' @param id Module namespace ID. Shiny modules use namespaced IDs so that
+#'   multiple instances of the same module don't conflict. \code{NS(id)}
+#'   creates a function that prefixes all input/output IDs with this namespace.
 #' @return A UI element.
 #' @export
 mod_data_loader_ui <- function(id) {
@@ -202,9 +206,14 @@ sanitize_error_msg <- function(msg) {
 
 #' Data Loader Module Server
 #'
+#' Handles the full data loading pipeline: fetch metadata from the IFCB
+#' Dashboard, match bins to monitoring stations, download raw files and
+#' classifications, compute biovolumes, and populate the shared reactive
+#' state (\code{rv}).
+#'
 #' @param id Module namespace ID.
 #' @param config Reactive values with settings.
-#' @param rv Reactive values for app state.
+#' @param rv Reactive values for app state (see server.R for field docs).
 #' @return NULL (side effects only).
 #' @export
 mod_data_loader_server <- function(id, config, rv) {
@@ -221,7 +230,13 @@ mod_data_loader_server <- function(id, config, rv) {
 
     # Fetch metadata from dashboard
     shiny::observeEvent(input$fetch_metadata, {
-      shiny::req(config$dashboard_url)
+      if (!nzchar(config$dashboard_url %||% "")) {
+        shiny::showNotification(
+          "Please enter a Dashboard URL in Settings first.",
+          type = "warning"
+        )
+        return()
+      }
 
       status("Fetching metadata from dashboard...")
       progress_id <- shiny::showNotification(
@@ -258,7 +273,13 @@ mod_data_loader_server <- function(id, config, rv) {
 
     # Load and process data
     shiny::observeEvent(input$load_data, {
-      shiny::req(rv$dashboard_metadata)
+      if (is.null(rv$dashboard_metadata)) {
+        shiny::showNotification(
+          "Please fetch metadata first.",
+          type = "warning"
+        )
+        return()
+      }
 
       shiny::withProgress(message = "Loading data...", value = 0, {
         tryCatch({

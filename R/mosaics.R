@@ -39,20 +39,21 @@ create_mosaic <- function(image_paths, n_images = 32L,
     as.numeric(magick::image_info(img)$width)
   }, numeric(1))
 
-  # Determine layout: compute aspect ratios to adapt grid
+  # Adaptive grid layout based on image shape:
+  # Chain-forming diatoms produce very wide (elongated) images, while round
+  # cells are more compact. The median aspect ratio determines how many
+  # images we try to fit per row.
   aspect_ratios <- widths / target_height
   median_aspect <- stats::median(aspect_ratios)
 
-  # For elongated images (median aspect > 2.5), use fewer columns
-
   tile_cols <- if (median_aspect > 4) {
-    1L
+    1L   # Very elongated (e.g. long chains) -> one image per row
   } else if (median_aspect > 2.5) {
-    2L
+    2L   # Moderately elongated -> two per row
   } else if (median_aspect > 1.5) {
-    3L
+    3L   # Slightly wide -> three per row
   } else {
-    4L
+    4L   # Compact/round cells -> four per row
   }
 
   # Adjust: ensure row width doesn't exceed max_width_px
@@ -61,7 +62,9 @@ create_mosaic <- function(image_paths, n_images = 32L,
   img_list <- img_list[ord]
   widths <- widths[ord]
 
-  # Build rows greedily: pack images until row width exceeds max
+  # Build rows greedily: add images left-to-right until the row is full
+  # (either max columns reached or pixel width exceeded), then start a new row.
+  # 4px gap between images within a row, 2px gap between rows.
   rows <- list()
   width_rows <- list()
   current_row <- list()
@@ -88,8 +91,8 @@ create_mosaic <- function(image_paths, n_images = 32L,
     width_rows <- c(width_rows, list(current_widths))
   }
 
-  # Limit rows to stay within max_height_px
-  row_height_with_gap <- target_height + 2  # 2px gap between rows
+  # Limit total mosaic height so it fits on approximately half an A4 page
+  row_height_with_gap <- target_height + 2  # 2px vertical gap between rows
   max_rows <- max(1L, floor(max_height_px / row_height_with_gap))
   if (length(rows) > max_rows) {
     rows <- rows[seq_len(max_rows)]

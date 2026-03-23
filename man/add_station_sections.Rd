@@ -4,7 +4,13 @@
 \alias{add_station_sections}
 \title{Add station report sections to document}
 \usage{
-add_station_sections(doc, station_summary, taxa_lookup = NULL, use_llm = FALSE)
+add_station_sections(
+  doc,
+  station_summary,
+  taxa_lookup = NULL,
+  use_llm = FALSE,
+  llm_provider = NULL
+)
 }
 \description{
 Add station report sections to document

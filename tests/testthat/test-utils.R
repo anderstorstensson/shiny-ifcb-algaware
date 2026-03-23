@@ -80,3 +80,57 @@ test_that("read_roi_dimensions returns empty data.frame for missing file", {
   expect_equal(nrow(result), 0)
   expect_equal(names(result), c("roi_number", "width", "height", "roi_area"))
 })
+
+test_that("read_roi_dimensions reads CSV correctly", {
+  tmp <- tempfile(fileext = ".adc")
+  on.exit(unlink(tmp), add = TRUE)
+
+  # ADC has many columns; V16 = width, V17 = height
+  lines <- c(
+    paste(c(rep(0, 15), 100, 50, rep(0, 3)), collapse = ","),
+    paste(c(rep(0, 15), 200, 80, rep(0, 3)), collapse = ",")
+  )
+  writeLines(lines, tmp)
+
+  result <- algaware:::read_roi_dimensions(tmp)
+  expect_equal(nrow(result), 2)
+  expect_equal(result$width, c(100, 200))
+  expect_equal(result$height, c(50, 80))
+  expect_equal(result$roi_area, c(5000, 16000))
+  expect_equal(result$roi_number, c(1L, 2L))
+})
+
+test_that("load_settings merges saved values over defaults", {
+  tmp_dir <- file.path(tempdir(), paste0("test_merge_", Sys.getpid()))
+  dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+  settings_path <- file.path(tmp_dir, "settings.json")
+  jsonlite::write_json(
+    list(dashboard_url = "https://custom.example.com", annotator = "bob"),
+    settings_path, auto_unbox = TRUE
+  )
+
+  mockery::stub(load_settings, "get_settings_path", settings_path)
+  result <- load_settings()
+
+  expect_equal(result$dashboard_url, "https://custom.example.com")
+  expect_equal(result$annotator, "bob")
+  # Defaults still present for unset keys
+
+  expect_equal(result$pixels_per_micron, 2.77)
+})
+
+test_that("load_settings handles corrupt JSON gracefully", {
+  tmp_dir <- file.path(tempdir(), paste0("test_corrupt_", Sys.getpid()))
+  dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+  settings_path <- file.path(tmp_dir, "settings.json")
+  writeLines("not valid json{{{", settings_path)
+
+  mockery::stub(load_settings, "get_settings_path", settings_path)
+  expect_warning(result <- load_settings(), "Failed to load settings")
+  expect_type(result, "list")
+  expect_equal(result$dashboard_url, "")
+})

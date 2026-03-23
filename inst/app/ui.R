@@ -22,27 +22,26 @@ ui <- bslib::page_sidebar(
     tags$script(src = "gallery.js")
   ),
 
-  # Sidebar
+  # Sidebar: workflow goes top-to-bottom: Settings -> Load Data -> Validate -> Report
   sidebar = bslib::sidebar(
     width = 350,
 
-    # Settings button
     mod_settings_ui("settings"),
 
     hr(),
 
-    # Data loader
     mod_data_loader_ui("data_loader"),
 
     hr(),
 
-    # Validation controls
+    # conditionalPanel() shows/hides UI based on a JavaScript expression.
+    # "output.data_loaded" reads the reactive flag set in server.R, so these
+    # sections only appear after data has been successfully loaded.
     conditionalPanel(
       condition = "output.data_loaded",
       mod_validation_ui("validation")
     ),
 
-    # Report generation
     conditionalPanel(
       condition = "output.data_loaded",
       mod_report_ui("report")
