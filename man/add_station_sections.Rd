@@ -10,7 +10,8 @@ add_station_sections(
   taxa_lookup = NULL,
   use_llm = FALSE,
   llm_provider = NULL,
-  on_llm_progress = NULL
+  on_llm_progress = NULL,
+  unclassified_fractions = NULL
 )
 }
 \description{

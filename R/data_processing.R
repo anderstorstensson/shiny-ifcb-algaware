@@ -334,6 +334,49 @@ create_wide_summary <- function(station_summary, coast) {
   wide
 }
 
+#' Compute the percentage of unclassified images per station visit
+#'
+#' @param classifications Classification data.frame with \code{sample_name}
+#'   and \code{class_name}.
+#' @param matched_metadata Metadata with \code{pid}, \code{STATION_NAME},
+#'   \code{sample_time} matched to stations.
+#' @return A named list mapping visit_id to the percentage (0-100) of
+#'   unclassified images at that visit.
+#' @export
+compute_unclassified_fractions <- function(classifications, matched_metadata) {
+  # Join classifications with metadata to get station visits
+  merged <- merge(
+    classifications[, c("sample_name", "class_name")],
+    matched_metadata[, c("pid", "STATION_NAME", "sample_time")],
+    by.x = "sample_name", by.y = "pid"
+  )
+  if (nrow(merged) == 0) return(list())
+
+  merged <- assign_station_visits(merged)
+
+  # Count total and unclassified per visit
+  visit_totals <- stats::aggregate(
+    class_name ~ visit_id, data = merged, FUN = length
+  )
+  names(visit_totals)[2] <- "total"
+
+  unclass_rows <- merged[merged$class_name == "unclassified", ]
+  if (nrow(unclass_rows) > 0) {
+    unclass_counts <- stats::aggregate(
+      class_name ~ visit_id, data = unclass_rows, FUN = length
+    )
+    names(unclass_counts)[2] <- "n_unclassified"
+    counts <- merge(visit_totals, unclass_counts, by = "visit_id", all.x = TRUE)
+  } else {
+    counts <- visit_totals
+    counts$n_unclassified <- 0L
+  }
+  counts$n_unclassified[is.na(counts$n_unclassified)] <- 0
+  counts$pct <- counts$n_unclassified / counts$total * 100
+
+  stats::setNames(as.list(counts$pct), counts$visit_id)
+}
+
 #' Apply class invalidation
 #'
 #' Replaces invalidated class names with "unclassified" in the classification

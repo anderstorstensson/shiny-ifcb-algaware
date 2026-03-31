@@ -28,23 +28,30 @@ test_that("build_relabel_choices groups DB, taxa, and custom classes", {
   expect_equal(result$grouped[["Taxa lookup"]], c("ClassC", "ClassD"))
   # Custom group excludes classes in DB or taxa
   expect_equal(result$grouped[["Custom classes"]], "ClassE")
-  # All classes combined
-  expect_equal(result$all, c("ClassA", "ClassB", "ClassC", "ClassD", "ClassE"))
+  # Other group includes unclassified
+  expect_true("Other" %in% names(result$grouped))
+  expect_equal(result$grouped[["Other"]], "unclassified")
+  # All classes combined (including unclassified)
+  expect_equal(result$all,
+               c("ClassA", "ClassB", "ClassC", "ClassD", "ClassE", "unclassified"))
 })
 
 test_that("build_relabel_choices handles empty inputs", {
   result <- build_relabel_choices()
-  expect_equal(length(result$grouped), 0)
-  expect_equal(length(result$all), 0)
+  # Still has the "Other" group with unclassified
+  expect_equal(length(result$grouped), 1)
+  expect_equal(result$grouped[["Other"]], "unclassified")
+  expect_equal(result$all, "unclassified")
 })
 
-test_that("build_relabel_choices omits empty groups", {
+test_that("build_relabel_choices omits empty groups except Other", {
   db <- c("ClassA")
   result <- build_relabel_choices(db, NULL, NULL)
 
   expect_true("Database classes" %in% names(result$grouped))
   expect_false("Taxa lookup" %in% names(result$grouped))
   expect_false("Custom classes" %in% names(result$grouped))
+  expect_true("Other" %in% names(result$grouped))
 })
 
 test_that("build_relabel_choices deduplicates across sources", {
@@ -54,9 +61,9 @@ test_that("build_relabel_choices deduplicates across sources", {
 
   result <- build_relabel_choices(db, taxa, custom)
 
-  # Shared only appears in DB group
-  expect_equal(result$all, "Shared")
-  expect_equal(length(result$grouped), 1)
+  # Shared only appears in DB group, plus Other
+  expect_equal(result$all, c("Shared", "unclassified"))
+  expect_equal(length(result$grouped), 2)
 })
 
 # -- merge_custom_taxa -----------------------------------------------------

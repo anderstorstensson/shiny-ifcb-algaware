@@ -139,6 +139,11 @@ mod_report_server <- function(id, rv, config) {
           total_bio <- sum(!rv$classifications$class_name %in% non_bio)
           n_stn_samples <- length(unique(rv$matched_metadata$pid))
 
+          # Compute unclassified fractions for LLM context
+          unclassified_fractions <- compute_unclassified_fractions(
+            rv$classifications, rv$matched_metadata
+          )
+
           llm_progress <- if (use_llm) {
             function(step, total, detail) {
               shiny::incProgress(
@@ -166,7 +171,8 @@ mod_report_server <- function(id, rv, config) {
             llm_provider = selected_provider,
             on_llm_progress = llm_progress,
             frontpage_baltic_mosaic = rv$frontpage_baltic_mosaic,
-            frontpage_westcoast_mosaic = rv$frontpage_westcoast_mosaic
+            frontpage_westcoast_mosaic = rv$frontpage_westcoast_mosaic,
+            unclassified_fractions = unclassified_fractions
           )
 
           report_path(out_file)

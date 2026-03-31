@@ -4,7 +4,11 @@
 \alias{format_cruise_summary_for_prompt}
 \title{Format cruise-level data summary for LLM prompt}
 \usage{
-format_cruise_summary_for_prompt(station_summary, taxa_lookup = NULL)
+format_cruise_summary_for_prompt(
+  station_summary,
+  taxa_lookup = NULL,
+  unclassified_fractions = NULL
+)
 }
 \arguments{
 \item{station_summary}{Full station_summary data frame.}

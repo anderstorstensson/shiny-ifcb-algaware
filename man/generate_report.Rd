@@ -23,7 +23,8 @@ generate_report(
   llm_provider = NULL,
   on_llm_progress = NULL,
   frontpage_baltic_mosaic = NULL,
-  frontpage_westcoast_mosaic = NULL
+  frontpage_westcoast_mosaic = NULL,
+  unclassified_fractions = NULL
 )
 }
 \arguments{

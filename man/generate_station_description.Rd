@@ -8,7 +8,8 @@ generate_station_description(
   station_data,
   taxa_lookup = NULL,
   all_stations_summary = NULL,
-  provider = NULL
+  provider = NULL,
+  unclassified_pct = NULL
 )
 }
 \arguments{

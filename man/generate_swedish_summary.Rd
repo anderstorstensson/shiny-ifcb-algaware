@@ -8,7 +8,8 @@ generate_swedish_summary(
   station_summary,
   taxa_lookup = NULL,
   cruise_info = "",
-  provider = NULL
+  provider = NULL,
+  unclassified_fractions = NULL
 )
 }
 \arguments{

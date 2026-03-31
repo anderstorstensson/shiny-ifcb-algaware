@@ -55,7 +55,8 @@ generate_report <- function(output_path, station_summary,
                             llm_provider = NULL,
                             on_llm_progress = NULL,
                             frontpage_baltic_mosaic = NULL,
-                            frontpage_westcoast_mosaic = NULL) {
+                            frontpage_westcoast_mosaic = NULL,
+                            unclassified_fractions = NULL) {
   template <- system.file("templates", "report_template.docx",
                           package = "algaware")
   if (!nzchar(template)) {
@@ -138,7 +139,8 @@ generate_report <- function(output_path, station_summary,
     report_progress("Swedish summary")
     swedish_text <- tryCatch(
       generate_swedish_summary(station_summary, taxa_lookup, cruise_info,
-                               provider = llm_provider),
+                               provider = llm_provider,
+                               unclassified_fractions = unclassified_fractions),
       error = function(e) {
         warning("LLM Swedish summary failed: ", e$message, call. = FALSE)
         "[Skriv sammanfattning pa svenska har. (LLM generation failed)]"
@@ -155,7 +157,8 @@ generate_report <- function(output_path, station_summary,
     report_progress("English summary")
     english_text <- tryCatch(
       generate_english_summary(station_summary, taxa_lookup, cruise_info,
-                               provider = llm_provider),
+                               provider = llm_provider,
+                               unclassified_fractions = unclassified_fractions),
       error = function(e) {
         warning("LLM English summary failed: ", e$message, call. = FALSE)
         "[Write English summary here. (LLM generation failed)]"
@@ -285,7 +288,8 @@ generate_report <- function(output_path, station_summary,
   # Station sections
   doc <- add_station_sections(doc, station_summary, taxa_lookup, use_llm,
                                llm_provider = llm_provider,
-                               on_llm_progress = report_progress)
+                               on_llm_progress = report_progress,
+                               unclassified_fractions = unclassified_fractions)
 
   # Image mosaics
   hab_species <- get_hab_species(taxa_lookup)
@@ -389,7 +393,8 @@ add_stacked_bar_section <- function(doc, wide_data, taxa_lookup, title,
 add_station_sections <- function(doc, station_summary,
                                  taxa_lookup = NULL, use_llm = FALSE,
                                  llm_provider = NULL,
-                                 on_llm_progress = NULL) {
+                                 on_llm_progress = NULL,
+                                 unclassified_fractions = NULL) {
   doc <- officer::body_add_par(doc, "Station Reports", style = "heading 2")
 
   visits <- unique(station_summary[, c("STATION_NAME", "STATION_NAME_SHORT",
@@ -416,10 +421,12 @@ add_station_sections <- function(doc, station_summary,
       }
       station_data <- station_summary[
         station_summary$visit_id == visits$visit_id[i], ]
+      visit_unclass_pct <- unclassified_fractions[[visits$visit_id[i]]]
       description <- tryCatch(
         generate_station_description(station_data, taxa_lookup,
                                      station_summary,
-                                     provider = llm_provider),
+                                     provider = llm_provider,
+                                     unclassified_pct = visit_unclass_pct),
         error = function(e) {
           warning("LLM station description failed for ",
                   visits$STATION_NAME_SHORT[i], ": ", e$message,

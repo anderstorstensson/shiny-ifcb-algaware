@@ -202,7 +202,8 @@ load_writing_guide <- function() {
 #' @param taxa_lookup Optional taxa lookup with HAB column.
 #' @return Character string describing the station data.
 #' @keywords internal
-format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
+format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL,
+                                           unclassified_pct = NULL) {
   station_name <- station_data$STATION_NAME_SHORT[1]
   full_name <- station_data$STATION_NAME[1]
   coast <- station_data$COAST[1]
@@ -266,6 +267,20 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
     )
   }
 
+  # Note about high unclassified fraction
+  unclass_note <- ""
+  if (!is.null(unclassified_pct) && unclassified_pct > 80) {
+    unclass_note <- sprintf(
+      "\nNOTE: %.0f%% of all images at this station were unclassified. ",
+      unclassified_pct
+    )
+    unclass_note <- paste0(
+      unclass_note,
+      "This means the classified taxa above represent only a small fraction ",
+      "of the total phytoplankton community. Mention this in the description."
+    )
+  }
+
   paste0(
     "Station: ", station_name, " (", full_name, ")\n",
     "Region: ", region, "\n",
@@ -277,7 +292,8 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
     if (nzchar(chl_info)) paste0(chl_info, "\n") else "",
     "\nTop taxa by biovolume:\n",
     paste(taxa_lines, collapse = "\n"),
-    hab_extra
+    hab_extra,
+    unclass_note
   )
 }
 
@@ -287,7 +303,8 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
 #' @param taxa_lookup Optional taxa lookup with HAB column.
 #' @return Character string with cruise-level overview.
 #' @keywords internal
-format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL) {
+format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL,
+                                              unclassified_fractions = NULL) {
   visits <- unique(station_summary[, c("STATION_NAME_SHORT", "COAST",
                                         "visit_date", "visit_id")])
   visits <- visits[order(visits$COAST, visits$visit_date), ]
@@ -334,11 +351,21 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
     }
 
     region <- if (v$COAST == "EAST") "Baltic" else "West"
-    sprintf("  %s (%s, %s): %d taxa, %.0f counts/L, %.4f mm3/L biovol, %.2f ug/L carbon | Top: %s%s%s",
+
+    # Unclassified note if >80%
+    unclass_note <- ""
+    if (!is.null(unclassified_fractions)) {
+      pct <- unclassified_fractions[[v$visit_id]]
+      if (!is.null(pct) && pct > 80) {
+        unclass_note <- sprintf(" | UNCLASSIFIED: %.0f%%", pct)
+      }
+    }
+
+    sprintf("  %s (%s, %s): %d taxa, %.0f counts/L, %.4f mm3/L biovol, %.2f ug/L carbon | Top: %s%s%s%s",
             v$STATION_NAME_SHORT, region, v$visit_date,
             n_taxa, total_counts, total_bv, total_carbon,
             paste(top_names, collapse = ", "),
-            hab_note, chl_note)
+            hab_note, chl_note, unclass_note)
   }, character(1))
 
   paste(station_lines, collapse = "\n")
@@ -510,9 +537,11 @@ strip_markdown <- function(text) {
 #' @return Character string with Swedish summary.
 #' @export
 generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "", provider = NULL) {
+                                     cruise_info = "", provider = NULL,
+                                     unclassified_fractions = NULL) {
   guide <- load_writing_guide()
-  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup)
+  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup,
+                                                   unclassified_fractions = unclassified_fractions)
 
   system_prompt <- paste0(
     "You are a marine biologist writing phytoplankton monitoring reports ",
@@ -559,9 +588,11 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
 #' @return Character string with English summary.
 #' @export
 generate_english_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "", provider = NULL) {
+                                     cruise_info = "", provider = NULL,
+                                     unclassified_fractions = NULL) {
   guide <- load_writing_guide()
-  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup)
+  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup,
+                                                   unclassified_fractions = unclassified_fractions)
 
   system_prompt <- paste0(
     "You are a marine biologist writing phytoplankton monitoring reports ",
@@ -595,9 +626,11 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
 #' @export
 generate_station_description <- function(station_data, taxa_lookup = NULL,
                                          all_stations_summary = NULL,
-                                         provider = NULL) {
+                                         provider = NULL,
+                                         unclassified_pct = NULL) {
   guide <- load_writing_guide()
-  station_text <- format_station_data_for_prompt(station_data, taxa_lookup)
+  station_text <- format_station_data_for_prompt(station_data, taxa_lookup,
+                                                  unclassified_pct = unclassified_pct)
 
   # Provide cruise-wide context so the LLM can make relative statements
   context <- ""

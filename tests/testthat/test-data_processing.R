@@ -285,3 +285,60 @@ test_that("identify_diatom_classes works without custom_classes", {
   result <- identify_diatom_classes(taxa, NULL)
   expect_equal(result, "Thalassiosira_spp")
 })
+
+# -- compute_unclassified_fractions -------------------------------------------
+
+test_that("compute_unclassified_fractions computes correct percentages", {
+  classifications <- data.frame(
+    sample_name = rep(c("s1", "s2"), each = 5),
+    class_name = c("ClassA", "ClassA", "unclassified", "unclassified",
+                   "unclassified",       # s1: 3/5 = 60% unclassified
+                   "unclassified", "unclassified", "unclassified",
+                   "unclassified", "ClassB"),  # s2: 4/5 = 80% unclassified
+    stringsAsFactors = FALSE
+  )
+  metadata <- data.frame(
+    pid = c("s1", "s2"),
+    STATION_NAME = c("STN_A", "STN_A"),
+    sample_time = as.POSIXct(c("2024-01-01 10:00", "2024-01-01 11:00")),
+    stringsAsFactors = FALSE
+  )
+
+  result <- compute_unclassified_fractions(classifications, metadata)
+  expect_type(result, "list")
+  expect_length(result, 1)
+  # Both samples at same station within 12h -> one visit, 7/10 = 70%
+  expect_equal(result[[1]], 70)
+})
+
+test_that("compute_unclassified_fractions returns 0 when none unclassified", {
+  classifications <- data.frame(
+    sample_name = "s1",
+    class_name = "ClassA",
+    stringsAsFactors = FALSE
+  )
+  metadata <- data.frame(
+    pid = "s1",
+    STATION_NAME = "STN_A",
+    sample_time = as.POSIXct("2024-01-01 10:00"),
+    stringsAsFactors = FALSE
+  )
+
+  result <- compute_unclassified_fractions(classifications, metadata)
+  expect_equal(result[[1]], 0)
+})
+
+test_that("compute_unclassified_fractions returns empty list for no data", {
+  classifications <- data.frame(
+    sample_name = "s1", class_name = "ClassA", stringsAsFactors = FALSE
+  )
+  metadata <- data.frame(
+    pid = "s999",
+    STATION_NAME = "STN_A",
+    sample_time = as.POSIXct("2024-01-01 10:00"),
+    stringsAsFactors = FALSE
+  )
+
+  result <- compute_unclassified_fractions(classifications, metadata)
+  expect_length(result, 0)
+})

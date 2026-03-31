@@ -65,8 +65,7 @@ get_region_context <- function(rv) {
 
   classes <- sort(unique(
     rv$classifications$class_name[
-      rv$classifications$sample_name %in% region_samples &
-      rv$classifications$class_name != "unclassified"
+      rv$classifications$sample_name %in% region_samples
     ]
   ))
 

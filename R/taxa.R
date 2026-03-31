@@ -52,8 +52,9 @@ build_relabel_choices <- function(db_class_list = character(0),
   if (length(db_classes) > 0) grouped[["Database classes"]] <- db_classes
   if (length(taxa_classes) > 0) grouped[["Taxa lookup"]] <- taxa_classes
   if (length(custom) > 0) grouped[["Custom classes"]] <- custom
+  grouped[["Other"]] <- "unclassified"
 
-  all_classes <- c(db_classes, taxa_classes, custom)
+  all_classes <- c(db_classes, taxa_classes, custom, "unclassified")
 
   list(grouped = grouped, all = all_classes)
 }
