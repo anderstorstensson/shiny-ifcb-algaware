@@ -10,6 +10,7 @@ add_front_page(
   taxa_lookup = NULL,
   cruise_info = "",
   report_number = NULL,
+  report_dnr = NULL,
   image_counts = NULL
 )
 }
@@ -24,6 +25,8 @@ add_front_page(
 2026-03-15 to 2026-03-22").}
 
 \item{report_number}{Optional report issue number (e.g. "1").}
+
+\item{report_dnr}{Optional diarienummer string (e.g. "2026-1234").}
 
 \item{image_counts}{Optional image counts data for the cruise track map.}
 }

@@ -27,7 +27,8 @@ generate_report(
   unclassified_fractions = NULL,
   frontpage_baltic_taxa = NULL,
   frontpage_westcoast_taxa = NULL,
-  report_number = NULL
+  report_number = NULL,
+  report_dnr = NULL
 )
 }
 \arguments{
@@ -83,6 +84,9 @@ is generated.}
 \item{frontpage_westcoast_mosaic}{Optional magick image for the front page
 West Coast mosaic.}
 
+\item{unclassified_fractions}{Optional named list or data frame of
+unclassified proportion estimates passed to the LLM prompts for context.}
+
 \item{frontpage_baltic_taxa}{Optional character vector of taxa names
 matching the numbered images in the Baltic mosaic (for captions).}
 
@@ -90,6 +94,9 @@ matching the numbered images in the Baltic mosaic (for captions).}
 matching the numbered images in the West Coast mosaic.}
 
 \item{report_number}{Optional report issue number (e.g. \code{"1"}).}
+
+\item{report_dnr}{Optional diarienummer string for the front page
+(e.g. \code{"2026-1234"}).}
 }
 \value{
 Invisible path to the created document.

@@ -103,6 +103,20 @@ mod_validation_server <- function(id, rv, config) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    update_full_classifications <- function(sample_names, roi_numbers, new_class) {
+      if (is.null(rv$classifications_all) || nrow(rv$classifications_all) == 0) {
+        return(invisible(NULL))
+      }
+      keys_all <- paste0(rv$classifications_all$sample_name, "_",
+                         rv$classifications_all$roi_number)
+      keys_target <- paste0(sample_names, "_", roi_numbers)
+      mask_all <- keys_all %in% keys_target
+      if (any(mask_all)) {
+        rv$classifications_all$class_name[mask_all] <- new_class
+      }
+      invisible(NULL)
+    }
+
     # ---- 1. Store Annotations (to database) ----
     shiny::observeEvent(input$store_annotations, {
       shiny::req(length(rv$selected_images) > 0)
@@ -219,7 +233,10 @@ mod_validation_server <- function(id, rv, config) {
 
       updated$class_name <- ifelse(mask, target, updated$class_name)
       rv$classifications <- updated
+      update_full_classifications(updated$sample_name[mask],
+                                  updated$roi_number[mask], target)
       rv$selected_images <- character(0)
+      rv$summaries_stale <- TRUE
 
       shiny::removeModal()
       shiny::showNotification(
@@ -290,6 +307,9 @@ mod_validation_server <- function(id, rv, config) {
       updated <- rv$classifications
       updated$class_name <- ifelse(mask, target, updated$class_name)
       rv$classifications <- updated
+      update_full_classifications(updated$sample_name[mask],
+                                  updated$roi_number[mask], target)
+      rv$summaries_stale <- TRUE
 
       # Adjust class index if needed (class list changed)
       new_classes <- sort(unique(
@@ -347,6 +367,9 @@ mod_validation_server <- function(id, rv, config) {
       updated <- rv$classifications
       updated$class_name <- ifelse(mask, "unclassified", updated$class_name)
       rv$classifications <- updated
+      update_full_classifications(updated$sample_name[mask],
+                                  updated$roi_number[mask], "unclassified")
+      rv$summaries_stale <- TRUE
 
       rv$invalidated_classes <- unique(c(rv$invalidated_classes,
                                          ctx$current_class))

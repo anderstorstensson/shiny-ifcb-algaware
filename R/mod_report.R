@@ -9,8 +9,18 @@ mod_report_ui <- function(id) {
     class = "report-section",
     shiny::hr(),
     shiny::h5("Report Generation"),
-    shiny::textInput(ns("report_number"), "Report No",
-                     placeholder = "e.g. 1"),
+    shiny::fluidRow(
+      shiny::column(
+        width = 6,
+        shiny::textInput(ns("report_number"), "Report No",
+                         placeholder = "e.g. 1")
+      ),
+      shiny::column(
+        width = 6,
+        shiny::textInput(ns("report_dnr"), "Dnr",
+                         placeholder = "e.g. 2026/718/2.1.3")
+      )
+    ),
     shiny::uiOutput(ns("llm_status")),
     shiny::actionButton(ns("make_report"), "Make Report",
                         class = "btn-primary mb-1",
@@ -36,28 +46,60 @@ mod_report_server <- function(id, rv, config) {
     report_path <- shiny::reactiveVal(NULL)
     corrections_path <- shiny::reactiveVal(NULL)
 
+    # Initialize Dnr field from persisted settings.
+    shiny::observeEvent(config$report_dnr, {
+      shiny::updateTextInput(session, "report_dnr",
+                             value = config$report_dnr %||% "")
+    }, ignoreInit = FALSE)
+
+    # Persist Dnr changes between sessions.
+    shiny::observeEvent(input$report_dnr, {
+      new_dnr <- trimws(input$report_dnr %||% "")
+      old_dnr <- trimws(config$report_dnr %||% "")
+      if (!identical(new_dnr, old_dnr)) {
+        config$report_dnr <- new_dnr
+        save_settings(shiny::reactiveValuesToList(config))
+      }
+    }, ignoreInit = TRUE)
+
     output$llm_status <- shiny::renderUI({
       providers <- llm_providers()
       if (length(providers) > 0) {
+        use_llm_checked <- isTRUE(input$use_llm %||% TRUE)
         provider_labels <- c(
           openai = paste0("OpenAI (", llm_model_name("openai"), ")"),
           gemini = paste0("Gemini (", llm_model_name("gemini"), ")")
         )
         choices <- stats::setNames(providers, provider_labels[providers])
         provider_ui <- if (length(providers) > 1) {
-          shiny::selectInput(ns("llm_provider"), "LLM Provider",
-                             choices = choices, selected = providers[1],
+          selected_provider <- input$llm_provider %||% providers[1]
+          control <- shiny::selectInput(ns("llm_provider"), "LLM Provider",
+                             choices = choices, selected = selected_provider,
                              width = "220px")
+          if (!use_llm_checked) {
+            control <- shiny::tags$div(
+              style = "opacity: 0.55; pointer-events: none;",
+              control
+            )
+          }
+          control
         } else {
+          selected_provider <- providers[1]
+          provider_text <- paste0(" ", provider_labels[selected_provider],
+                                  " API key detected")
+          if (!use_llm_checked) {
+            provider_text <- paste0(provider_text, " (disabled)")
+          }
           shiny::div(
             class = "llm-status available",
+            style = if (!use_llm_checked) "opacity: 0.55;" else NULL,
             shiny::icon("robot"),
-            paste0(" ", provider_labels[providers], " API key detected")
+            provider_text
           )
         }
         shiny::tagList(
           shiny::checkboxInput(ns("use_llm"), "AI text generation",
-                               value = TRUE),
+                               value = use_llm_checked),
           provider_ui
         )
       } else {
@@ -108,18 +150,24 @@ mod_report_server <- function(id, rv, config) {
           if (isTRUE(config$include_class_mosaics)) {
             shiny::incProgress(0.3, detail = "Creating mosaics...")
 
-            baltic_mosaics <- create_region_mosaics(
-              baltic_wide, rv$classifications, rv$baltic_samples,
-              file.path(storage, "raw"), taxa_lookup,
-              n_taxa = config$n_mosaic_taxa,
-              n_images = config$n_mosaic_images
+            baltic_mosaics <- suppressWarnings(
+              create_region_mosaics(
+                baltic_wide, rv$classifications, rv$baltic_samples,
+                file.path(storage, "raw"), taxa_lookup,
+                n_taxa = config$n_mosaic_taxa,
+                n_images = config$n_mosaic_images,
+                scale_micron_factor = 1 / config$pixels_per_micron
+              )
             )
 
-            westcoast_mosaics <- create_region_mosaics(
-              westcoast_wide, rv$classifications, rv$westcoast_samples,
-              file.path(storage, "raw"), taxa_lookup,
-              n_taxa = config$n_mosaic_taxa,
-              n_images = config$n_mosaic_images
+            westcoast_mosaics <- suppressWarnings(
+              create_region_mosaics(
+                westcoast_wide, rv$classifications, rv$westcoast_samples,
+                file.path(storage, "raw"), taxa_lookup,
+                n_taxa = config$n_mosaic_taxa,
+                n_images = config$n_mosaic_images,
+                scale_micron_factor = 1 / config$pixels_per_micron
+              )
             )
           }
 
@@ -132,9 +180,13 @@ mod_report_server <- function(id, rv, config) {
           fp_westcoast_taxa <- rv$frontpage_westcoast_taxa
 
           if (is.null(fp_baltic_mosaic) && length(rv$baltic_samples) > 0) {
-            result <- generate_frontpage_mosaic(
-              rv$classifications, taxa_lookup, rv$baltic_samples,
-              file.path(storage, "raw"), non_bio
+            result <- suppressWarnings(
+              generate_frontpage_mosaic(
+                rv$classifications, taxa_lookup, rv$baltic_samples,
+                file.path(storage, "raw"), non_bio,
+                wide_summary = baltic_wide,
+                scale_micron_factor = 1 / config$pixels_per_micron
+              )
             )
             if (!is.null(result)) {
               fp_baltic_mosaic <- result$mosaic
@@ -143,9 +195,13 @@ mod_report_server <- function(id, rv, config) {
           }
 
           if (is.null(fp_westcoast_mosaic) && length(rv$westcoast_samples) > 0) {
-            result <- generate_frontpage_mosaic(
-              rv$classifications, taxa_lookup, rv$westcoast_samples,
-              file.path(storage, "raw"), non_bio
+            result <- suppressWarnings(
+              generate_frontpage_mosaic(
+                rv$classifications, taxa_lookup, rv$westcoast_samples,
+                file.path(storage, "raw"), non_bio,
+                wide_summary = westcoast_wide,
+                scale_micron_factor = 1 / config$pixels_per_micron
+              )
             )
             if (!is.null(result)) {
               fp_westcoast_mosaic <- result$mosaic
@@ -211,7 +267,8 @@ mod_report_server <- function(id, rv, config) {
             unclassified_fractions = unclassified_fractions,
             frontpage_baltic_taxa = fp_baltic_taxa,
             frontpage_westcoast_taxa = fp_westcoast_taxa,
-            report_number = input$report_number
+            report_number = input$report_number,
+            report_dnr = input$report_dnr
           )
 
           report_path(out_file)

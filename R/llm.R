@@ -534,6 +534,7 @@ strip_markdown <- function(text) {
 #' @param cruise_info Cruise info string.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
+#' @param unclassified_fractions Optional per-sample fractions of unclassified detections supplied to the prompt.
 #' @return Character string with Swedish summary.
 #' @export
 generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
@@ -585,6 +586,8 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param cruise_info Cruise info string.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
+ #' @param unclassified_fractions Optional per-sample unclassified percentages
+ #'   for contextualizing the summary.
 #' @return Character string with English summary.
 #' @export
 generate_english_summary <- function(station_summary, taxa_lookup = NULL,
@@ -622,6 +625,7 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param all_stations_summary Optional full station_summary for context.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
+ #' @param unclassified_pct Optional per-class unclassified percentage info used for context.
 #' @return Character string with station description in English.
 #' @export
 generate_station_description <- function(station_data, taxa_lookup = NULL,

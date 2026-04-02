@@ -11,7 +11,9 @@ extract_random_taxon_image(
   sample_ids,
   raw_data_path,
   temp_dir,
-  exclude_rois = NULL
+  exclude_rois = NULL,
+  scale_micron_factor = NULL,
+  scale_bar_um = 5
 )
 }
 \arguments{
@@ -29,6 +31,11 @@ extract_random_taxon_image(
 
 \item{exclude_rois}{Optional data.frame with \code{sample_name} and
 \code{roi_number} columns to exclude from selection.}
+
+\item{scale_micron_factor}{Optional numeric microns-per-pixel factor for
+drawing scale bars in extracted PNGs.}
+
+\item{scale_bar_um}{Scale bar length in microns. Default 5.}
 }
 \value{
 A list with \code{path}, \code{taxon}, \code{sample_name},

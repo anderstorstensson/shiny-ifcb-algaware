@@ -17,8 +17,11 @@ server <- function(input, output, session) {
     # -- Data loading stage (set by mod_data_loader) --
     dashboard_metadata  = NULL,          # Raw metadata from IFCB Dashboard API
     cruise_numbers      = character(0),  # Available cruise IDs for dropdown
+    matched_metadata_all = NULL,         # Full matched metadata before exclusions
     matched_metadata    = NULL,          # Metadata filtered & matched to stations
+    classifications_raw_all = NULL,      # Full original AI predictions
     classifications_raw = NULL,          # Original AI predictions (immutable)
+    classifications_all = NULL,          # Full working copy across all samples
     classifications     = NULL,          # Working copy (mutated by validation)
     invalidated_classes = character(0),  # Classes marked as non-biological
     taxa_lookup         = NULL,          # Mapping: class_name -> scientific name
@@ -28,7 +31,9 @@ server <- function(input, output, session) {
     baltic_samples      = character(0),  # Sample IDs belonging to Baltic
     westcoast_samples   = character(0),  # Sample IDs belonging to West Coast
     class_list          = character(0),  # Approved class names for annotation
+    ferrybox_data       = NULL,          # Raw ferrybox rows for active cruise samples
     ferrybox_chl        = NULL,          # Chlorophyll data from ferrybox sensors
+    image_counts_all    = NULL,          # Cruise image counts before exclusions
     image_counts        = NULL,          # Per-sample image counts (cruise-wide)
     cruise_info         = "",            # Human-readable cruise description
     classifier_name     = NULL,          # Name of the AI classifier model
@@ -62,6 +67,7 @@ server <- function(input, output, session) {
     frontpage_westcoast_mosaic = NULL,   # Magick image for front page West Coast mosaic
 
     # -- App state flags --
+    excluded_samples = character(0),     # Loaded samples excluded from analysis/report
     data_loaded = FALSE,                 # TRUE once data loading completes
     summaries_stale = FALSE              # TRUE when classifications changed but summaries not yet recomputed
   )
@@ -94,27 +100,56 @@ server <- function(input, output, session) {
   mod_data_loader_server("data_loader", config, rv)
   mod_gallery_server("gallery", rv, config)
   mod_validation_server("validation", rv, config)
+  mod_samples_server("samples", rv, config)
   mod_frontpage_server("frontpage", rv, config)
   mod_report_server("report", rv, config)
 
-  # ---------------------------------------------------------------------------
-  # Lazy recomputation of summaries after reclassification
-  #
-  # Rather than recomputing biovolumes on every relabel/invalidation, we set a
-  # dirty flag and defer the expensive work until the user navigates to a tab
-  # that actually needs updated summaries (Maps, Plots, Summary, Front Page).
-  # ---------------------------------------------------------------------------
-  observeEvent(rv$classifications, {
-    req(rv$data_loaded, rv$classifications_raw)
-    if (!identical(rv$classifications, rv$classifications_raw)) {
-      rv$summaries_stale <- TRUE
+  compute_ferrybox_summary <- function(matched_metadata, ferrybox_data) {
+    if (is.null(matched_metadata) || nrow(matched_metadata) == 0 ||
+        is.null(ferrybox_data) || nrow(ferrybox_data) == 0 ||
+        !"chl" %in% names(ferrybox_data)) {
+      return(NULL)
     }
-  })
+
+    matched_fb <- merge(
+      matched_metadata[, c("pid", "STATION_NAME", "sample_time")],
+      ferrybox_data[, c("timestamp", "chl")],
+      by.x = "sample_time",
+      by.y = "timestamp",
+      all.x = TRUE
+    )
+
+    if (nrow(matched_fb) == 0) {
+      return(NULL)
+    }
+
+    chl_summary <- stats::aggregate(
+      chl ~ STATION_NAME,
+      data = matched_fb,
+      FUN = function(x) {
+        vals <- x[!is.na(x)]
+        if (length(vals) == 0) NA_real_ else mean(vals)
+      },
+      na.action = stats::na.pass
+    )
+    names(chl_summary)[names(chl_summary) == "chl"] <- "chl_mean"
+    chl_summary
+  }
 
   recompute_summaries <- function() {
     id <- showNotification("Updating summaries...", type = "message",
                            duration = NULL, closeButton = FALSE)
     on.exit(removeNotification(id), add = TRUE)
+
+    if (is.null(rv$matched_metadata) || nrow(rv$matched_metadata) == 0 ||
+        is.null(rv$classifications) || nrow(rv$classifications) == 0) {
+      rv$ferrybox_chl <- NULL
+      rv$station_summary <- NULL
+      rv$baltic_wide <- data.frame(scientific_name = character(0))
+      rv$westcoast_wide <- data.frame(scientific_name = character(0))
+      rv$summaries_stale <- FALSE
+      return(invisible(NULL))
+    }
 
     non_bio <- parse_non_bio_classes(config$non_biological_classes)
     taxa_lookup <- merge_custom_taxa(rv$taxa_lookup, rv$custom_classes)
@@ -132,6 +167,9 @@ server <- function(input, output, session) {
       biovolume_data, rv$matched_metadata
     )
 
+    rv$ferrybox_chl <- compute_ferrybox_summary(rv$matched_metadata,
+                                                rv$ferrybox_data)
+
     # Re-attach ferrybox chlorophyll data
     if (!is.null(rv$ferrybox_chl)) {
       station_summary <- merge(station_summary, rv$ferrybox_chl,
@@ -143,6 +181,56 @@ server <- function(input, output, session) {
     rv$westcoast_wide <- create_wide_summary(station_summary, "WEST")
     rv$summaries_stale <- FALSE
   }
+
+  refresh_active_dataset <- function() {
+    if (!isTRUE(rv$data_loaded) || is.null(rv$matched_metadata_all)) {
+      return(invisible(NULL))
+    }
+
+    active_ids <- setdiff(unique(rv$matched_metadata_all$pid), rv$excluded_samples)
+
+    rv$matched_metadata <- rv$matched_metadata_all[
+      rv$matched_metadata_all$pid %in% active_ids, ,
+      drop = FALSE
+    ]
+    rv$classifications_raw <- rv$classifications_raw_all[
+      rv$classifications_raw_all$sample_name %in% active_ids, ,
+      drop = FALSE
+    ]
+    rv$classifications <- rv$classifications_all[
+      rv$classifications_all$sample_name %in% active_ids, ,
+      drop = FALSE
+    ]
+    rv$baltic_samples <- rv$matched_metadata$pid[rv$matched_metadata$COAST == "EAST"]
+    rv$westcoast_samples <- rv$matched_metadata$pid[rv$matched_metadata$COAST == "WEST"]
+
+    if (!is.null(rv$image_counts_all) && nrow(rv$image_counts_all) > 0) {
+      rv$image_counts <- rv$image_counts_all[
+        !rv$image_counts_all$pid %in% rv$excluded_samples, ,
+        drop = FALSE
+      ]
+    } else {
+      rv$image_counts <- rv$image_counts_all
+    }
+
+    rv$cruise_info <- if (!is.null(rv$matched_metadata) &&
+                          nrow(rv$matched_metadata) > 0) {
+      build_cruise_info(rv$matched_metadata$sample_time)
+    } else {
+      ""
+    }
+
+    rv$frontpage_baltic_mosaic <- NULL
+    rv$frontpage_westcoast_mosaic <- NULL
+
+    recompute_summaries()
+    invisible(NULL)
+  }
+
+  observeEvent(rv$excluded_samples, {
+    req(rv$data_loaded, rv$matched_metadata_all)
+    refresh_active_dataset()
+  }, ignoreInit = TRUE)
 
   observeEvent(input$main_tabs, {
     req(isTRUE(rv$summaries_stale), rv$data_loaded, rv$matched_metadata)

@@ -262,3 +262,27 @@ test_that("copy_classification_files finds files in yearly subdirs", {
     file.path(tmp_dest, "D20220101T000000_IFCB134_class.h5")
   ))
 })
+
+test_that("copy_classification_files works when root is already a year dir", {
+  tmp_src <- file.path(tempdir(), paste0("class_src_yearroot_", Sys.getpid()))
+  tmp_dest <- file.path(tempdir(), paste0("class_dest_yearroot_", Sys.getpid()))
+  dir.create(tmp_src, recursive = TRUE, showWarnings = FALSE)
+  dir.create(tmp_dest, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(c(tmp_src, tmp_dest), recursive = TRUE), add = TRUE)
+
+  # Simulate user selecting "class2026_v3" directly in settings.
+  year_root <- file.path(tmp_src, "class2026_v3")
+  dir.create(year_root, recursive = TRUE, showWarnings = FALSE)
+  writeLines("fake h5",
+             file.path(year_root, "D20260107T222955_IFCB134_class.h5"))
+
+  copy_classification_files(
+    year_root,
+    c("D20260107T222955_IFCB134"),
+    tmp_dest
+  )
+
+  expect_true(file.exists(
+    file.path(tmp_dest, "D20260107T222955_IFCB134_class.h5")
+  ))
+})

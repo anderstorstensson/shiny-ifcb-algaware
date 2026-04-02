@@ -76,26 +76,26 @@ mod_frontpage_server <- function(id, rv, config) {
       if (input$region == "EAST") state$baltic_images else state$westcoast_images
     })
 
-    # Compute top taxa from the current (possibly reclassified) classifications.
-    # Uses image count as ranking metric - this is fast and always reflects
-    # corrections made in the Validate tab.
+    # Compute top taxa from current summaries when available, ranked by
+    # biovolume concentration (mm3/L). Fallback to image-count ranking if
+    # summaries are missing.
     current_top_taxa <- shiny::reactive({
       shiny::req(rv$data_loaded, rv$classifications)
       region <- input$region
+      wide <- if (region == "EAST") rv$baltic_wide else rv$westcoast_wide
+      if (!is.null(wide) && nrow(wide) > 0 && ncol(wide) > 1) {
+        return(get_top_taxa(wide, n_taxa = nrow(wide)))
+      }
+
       samples <- if (region == "EAST") rv$baltic_samples else rv$westcoast_samples
       taxa_lookup <- merge_custom_taxa(rv$taxa_lookup, rv$custom_classes)
-
-      region_class <- rv$classifications[
-        rv$classifications$sample_name %in% samples,
-      ]
+      region_class <- rv$classifications[rv$classifications$sample_name %in% samples, ]
       non_bio <- parse_non_bio_classes(config$non_biological_classes)
       region_class <- region_class[!region_class$class_name %in% non_bio, ]
 
-      # Map class names to scientific names
       name_map <- stats::setNames(taxa_lookup$name, taxa_lookup$clean_names)
       sci_names <- name_map[region_class$class_name]
       sci_names <- sci_names[!is.na(sci_names)]
-
       if (length(sci_names) == 0) return(character(0))
       names(sort(table(sci_names), decreasing = TRUE))
     })
@@ -132,9 +132,12 @@ mod_frontpage_server <- function(id, rv, config) {
         images <- list()
         for (i in seq_along(taxa)) {
           shiny::incProgress(1 / length(taxa), detail = taxa[i])
-          img_info <- extract_random_taxon_image(
-            taxa[i], rv$classifications, taxa_lookup, samples,
-            file.path(storage, "raw"), fp_dir
+          img_info <- suppressWarnings(
+            extract_random_taxon_image(
+              taxa[i], rv$classifications, taxa_lookup, samples,
+              file.path(storage, "raw"), fp_dir,
+              scale_micron_factor = 1 / config$pixels_per_micron
+            )
           )
           if (!is.null(img_info)) {
             images[[taxa[i]]] <- img_info
@@ -180,10 +183,13 @@ mod_frontpage_server <- function(id, rv, config) {
         state$westcoast_history[[taxon]]
       }
 
-      img_info <- extract_random_taxon_image(
-        taxon, rv$classifications, taxa_lookup, samples,
-        file.path(storage, "raw"), fp_dir,
-        exclude_rois = history
+      img_info <- suppressWarnings(
+        extract_random_taxon_image(
+          taxon, rv$classifications, taxa_lookup, samples,
+          file.path(storage, "raw"), fp_dir,
+          exclude_rois = history,
+          scale_micron_factor = 1 / config$pixels_per_micron
+        )
       )
 
       if (is.null(img_info)) {
@@ -199,9 +205,12 @@ mod_frontpage_server <- function(id, rv, config) {
             stringsAsFactors = FALSE
           )
         }
-        img_info <- extract_random_taxon_image(
-          taxon, rv$classifications, taxa_lookup, samples,
-          file.path(storage, "raw"), fp_dir
+        img_info <- suppressWarnings(
+          extract_random_taxon_image(
+            taxon, rv$classifications, taxa_lookup, samples,
+            file.path(storage, "raw"), fp_dir,
+            scale_micron_factor = 1 / config$pixels_per_micron
+          )
         )
       }
 
@@ -253,10 +262,18 @@ mod_frontpage_server <- function(id, rv, config) {
 
       mosaic <- tryCatch(
         create_mosaic(paths, n_images = length(paths),
-                      max_width_px = 1800L, target_height = 120L,
-                      max_height_px = 1100L, max_cols = Inf,
-                      labels = as.character(seq_along(paths))),
-        error = function(e) NULL
+                      max_width_px = 1800L, target_height = 150L,
+                      max_height_px = 1500L, max_cols = Inf,
+                      labels = as.character(seq_along(paths)),
+                      allow_taller_rows = TRUE),
+        error = function(e) {
+          shiny::showNotification(
+            paste0("Could not build mosaic: ", e$message),
+            type = "error",
+            duration = 8
+          )
+          NULL
+        }
       )
 
       if (region == "EAST") {

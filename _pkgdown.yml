@@ -72,6 +72,7 @@ reference:
       - aggregate_station_data
       - summarize_biovolumes
       - create_wide_summary
+      - parse_non_bio_classes
       - compute_unclassified_fractions
       - match_bins_to_stations
       - collect_ferrybox_data
@@ -96,6 +97,7 @@ reference:
     desc: Generate Word reports
     contents:
       - generate_report
+      - generate_frontpage_mosaic
       - generate_english_summary
       - generate_swedish_summary
       - generate_station_description
@@ -139,3 +141,4 @@ reference:
     contents:
       - load_settings
       - save_settings
+      - merge_custom_taxa

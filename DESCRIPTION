@@ -36,7 +36,8 @@ Imports:
     ggrepel,
     ggtext,
     viridis,
-    httr2
+    httr2,
+    rectpacker (>= 1.0.0)
 Suggests:
     mockery,
     rnaturalearthdata,

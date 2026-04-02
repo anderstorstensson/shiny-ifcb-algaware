@@ -21,6 +21,9 @@ generate_english_summary(
 
 \item{provider}{LLM provider (\code{"openai"} or \code{"gemini"}).
 NULL auto-detects.}
+
+\item{unclassified_fractions}{Optional per-sample unclassified percentages
+for contextualizing the summary.}
 }
 \value{
 Character string with English summary.

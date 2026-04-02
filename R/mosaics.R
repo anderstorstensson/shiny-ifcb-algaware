@@ -18,12 +18,15 @@
 #'   to annotate on each image.  Must be the same length as
 #'   \code{image_paths}.  Labels are drawn after resizing so font size is
 #'   consistent.
+#' @param allow_taller_rows Logical; if TRUE, rows with spare horizontal
+#'   space are allowed to grow taller (up to limits) to improve readability of
+#'   larger organisms in mixed mosaics. Default FALSE.
 #' @return A \code{magick} image object.
 #' @export
 create_mosaic <- function(image_paths, n_images = 32L,
                           max_width_px = 1800L, target_height = 120L,
                           max_height_px = 1500L, max_cols = NULL,
-                          labels = NULL) {
+                          labels = NULL, allow_taller_rows = FALSE) {
   if (length(image_paths) == 0) {
     stop("No images provided for mosaic", call. = FALSE)
   }
@@ -36,27 +39,14 @@ create_mosaic <- function(image_paths, n_images = 32L,
     imgs_sample <- image_paths
   }
 
-  # Read and resize to target height
-  img_list <- lapply(imgs_sample, function(p) {
-    magick::image_resize(magick::image_read(p), paste0("x", target_height))
-  })
+  img_list <- lapply(imgs_sample, magick::image_read)
+  img_info <- lapply(img_list, magick::image_info)
+  widths_raw <- vapply(img_info, function(info) as.numeric(info$width[1]), numeric(1))
+  heights_raw <- vapply(img_info, function(info) as.numeric(info$height[1]), numeric(1))
 
-  # Annotate images with labels (e.g. sequence numbers) after resize
-  if (!is.null(labels)) {
-    font_size <- max(16L, as.integer(target_height * 0.28))
-    img_list <- mapply(function(img, lbl) {
-      magick::image_annotate(img, lbl, size = font_size, color = "black",
-                             location = "+3+1", weight = 700)
-    }, img_list, labels, SIMPLIFY = FALSE)
-  }
-
-  # Compute median background color
+  # Compute median background color from the unscaled source images so later
+  # padding matches the image backdrop.
   median_col <- compute_median_color(img_list)
-
-  # Get dimensions
-  widths <- vapply(img_list, function(img) {
-    as.numeric(magick::image_info(img)$width)
-  }, numeric(1))
 
   # Adaptive grid layout based on image shape:
   # Chain-forming diatoms produce very wide (elongated) images, while round
@@ -66,7 +56,7 @@ create_mosaic <- function(image_paths, n_images = 32L,
   if (!is.null(max_cols)) {
     tile_cols <- max_cols
   } else {
-    aspect_ratios <- widths / target_height
+    aspect_ratios <- widths_raw / pmax(1, heights_raw)
     median_aspect <- stats::median(aspect_ratios)
     tile_cols <- if (median_aspect > 4) {
       1L
@@ -79,71 +69,407 @@ create_mosaic <- function(image_paths, n_images = 32L,
     }
   }
 
-  # Sort images by width descending
-  ord <- order(widths, decreasing = TRUE)
-  img_list <- img_list[ord]
-  widths <- widths[ord]
-
-  # Determine the minimum number of rows needed, accounting for 4px gaps
-  total_content_width <- sum(widths) + max(0, (length(widths) - 1)) * 4
-  n_rows <- max(1L, ceiling(total_content_width / max_width_px))
-
-  # Distribute images across rows using Longest Processing Time (LPT)
-  # scheduling: assign each image (widest first) to the row with the
-  # smallest current total.  This balances row widths and minimises grey.
-  rows <- vector("list", n_rows)
-  width_rows <- vector("list", n_rows)
-  row_totals <- rep(0, n_rows)
-  for (k in seq_len(n_rows)) {
-    rows[[k]] <- list()
-    width_rows[[k]] <- numeric(0)
+  # In mixed-taxa mosaics we want the physically largest images to drive the
+  # first rows. For the uniform-height path, width remains the relevant sort.
+  ord <- if (isTRUE(allow_taller_rows)) {
+    order(heights_raw, widths_raw, decreasing = TRUE)
+  } else {
+    order(widths_raw, decreasing = TRUE)
   }
+  img_list <- img_list[ord]
+  widths_raw <- widths_raw[ord]
+  heights_raw <- heights_raw[ord]
+  if (!is.null(labels)) labels <- labels[ord]
 
-  for (i in seq_along(img_list)) {
-    w <- widths[i]
+  rows <- list()
+  width_rows <- list()
+  height_rows <- list()
+  label_rows <- list()
+  gap_px <- 4
+  row_gap_px <- 2
+  target_row_width <- max_width_px
 
-    # Find the row with the least total width that can still accept this image
-    # (respects both tile_cols and max_width_px constraints)
-    candidates <- which(
-      vapply(rows, length, integer(1)) < tile_cols &
-        row_totals + w + ifelse(vapply(rows, length, integer(1)) > 0, 4, 0) <=
-          max_width_px
+  if (isTRUE(allow_taller_rows)) {
+    if (!requireNamespace("rectpacker", quietly = TRUE)) {
+      # Fall back to the previous shelf packer so mixed mosaics still render
+      # when the new dependency has not yet been installed in the running app.
+      pack_shelves <- function(scale) {
+        scaled_w <- pmax(1L, as.integer(round(widths_raw * scale)))
+        scaled_h <- pmax(1L, as.integer(round(heights_raw * scale)))
+
+        shelves <- list()
+        for (i in seq_along(scaled_w)) {
+          placed <- FALSE
+
+          if (length(shelves) > 0) {
+            for (s in seq_along(shelves)) {
+              shelf <- shelves[[s]]
+              next_x <- if (length(shelf$items) == 0) 0L else shelf$x + gap_px
+              if (scaled_h[i] <= shelf$height &&
+                  next_x + scaled_w[i] <= max_width_px) {
+                shelves[[s]]$items[[length(shelf$items) + 1L]] <- list(
+                  idx = i, x = next_x, y = shelf$y, w = scaled_w[i], h = scaled_h[i]
+                )
+                shelves[[s]]$x <- next_x + scaled_w[i]
+                placed <- TRUE
+                break
+              }
+            }
+          }
+
+          if (!placed) {
+            new_y <- if (length(shelves) == 0) {
+              0L
+            } else {
+              last <- shelves[[length(shelves)]]
+              last$y + last$height + row_gap_px
+            }
+            if (new_y + scaled_h[i] > max_height_px) {
+              return(list(fits = FALSE))
+            }
+            shelves[[length(shelves) + 1L]] <- list(
+              y = new_y,
+              height = scaled_h[i],
+              x = scaled_w[i],
+              items = list(list(idx = i, x = 0L, y = new_y, w = scaled_w[i], h = scaled_h[i]))
+            )
+          }
+        }
+
+        used_width <- 0L
+        used_height <- 0L
+        for (shelf in shelves) {
+          used_width <- max(used_width, shelf$x)
+          used_height <- max(used_height, shelf$y + shelf$height)
+        }
+        list(
+          fits = TRUE,
+          shelves = shelves,
+          used_width = used_width,
+          used_height = used_height
+        )
+      }
+
+      scale_upper <- min(
+        max_width_px / max(widths_raw),
+        max_height_px / max(heights_raw)
+      )
+      low <- 0
+      high <- scale_upper
+      best <- NULL
+
+      for (iter in seq_len(24)) {
+        mid <- (low + high) / 2
+        packed <- pack_shelves(mid)
+        if (isTRUE(packed$fits)) {
+          best <- packed
+          low <- mid
+        } else {
+          high <- mid
+        }
+      }
+
+      if (is.null(best)) {
+        stop("Could not pack mosaic into the requested page size", call. = FALSE)
+      }
+
+      canvas <- magick::image_blank(
+        max(1L, best$used_width),
+        max(1L, best$used_height),
+        color = median_col
+      )
+      label_size <- NULL
+      if (!is.null(labels)) {
+        tile_heights <- unlist(lapply(best$shelves, function(shelf) {
+          vapply(shelf$items, function(item) item$h, numeric(1))
+        }), use.names = FALSE)
+        label_size <- max(14L, as.integer(stats::median(tile_heights) * 0.22))
+      }
+
+      for (shelf in best$shelves) {
+        for (item in shelf$items) {
+          img <- magick::image_resize(
+            img_list[[item$idx]],
+            paste0(item$w, "x", item$h, "!")
+          )
+          if (!is.null(labels)) {
+            img <- magick::image_annotate(
+              img, labels[item$idx], size = label_size, color = "black",
+              location = "+3+1", weight = 700
+            )
+          }
+          canvas <- magick::image_composite(
+            canvas, img,
+            offset = paste0("+", item$x, "+", item$y)
+          )
+        }
+      }
+
+      return(canvas)
+    }
+
+    pack_hybrid <- function(scale) {
+      scaled_w <- pmax(1L, as.integer(round(widths_raw * scale)))
+      scaled_h <- pmax(1L, as.integer(round(heights_raw * scale)))
+
+      # Reserve only the two largest images at the top. Using three creates a
+      # top band that is too rigid and leaves large unused regions below.
+      n_top <- min(2L, length(scaled_w))
+      top_items <- list()
+      top_x <- 0L
+      top_row_height <- 0L
+
+      if (n_top > 0L) {
+        for (i in seq_len(n_top)) {
+          top_items[[i]] <- list(
+            idx = i,
+            x = top_x,
+            y = 0L,
+            w = scaled_w[i],
+            h = scaled_h[i]
+          )
+          top_row_height <- max(top_row_height, scaled_h[i])
+          top_x <- top_x + scaled_w[i] + gap_px
+        }
+        top_row_width <- top_x - gap_px
+      } else {
+        top_row_width <- 0L
+      }
+
+      if (top_row_width > max_width_px) {
+        return(list(fits = FALSE))
+      }
+
+      remaining_idx <- seq.int(n_top + 1L, length(scaled_w))
+      if (length(remaining_idx) == 0L) {
+        return(list(
+          fits = TRUE,
+          top_items = top_items,
+          packed_items = list(),
+          used_width = top_row_width,
+          used_height = top_row_height
+        ))
+      }
+
+      available_h <- max_height_px - top_row_height - row_gap_px
+      if (available_h <= 0) {
+        return(list(fits = FALSE))
+      }
+
+      rem_w <- scaled_w[remaining_idx]
+      rem_h <- scaled_h[remaining_idx]
+      rem_area <- rem_w * rem_h
+      rem_aspect <- pmax(rem_w / pmax(1L, rem_h), rem_h / pmax(1L, rem_w))
+
+      # Pack compact, high-area images first. Very elongated chain images tend
+      # to create large unusable gaps if placed too early.
+      rem_order <- order(rem_aspect > 3, -rem_area, -pmin(rem_w, rem_h))
+      rem_idx_ordered <- remaining_idx[rem_order]
+
+      packed <- rectpacker::pack_rects(
+        box_width = as.integer(max_width_px),
+        box_height = as.integer(available_h),
+        rect_widths = as.integer(scaled_w[rem_idx_ordered]),
+        rect_heights = as.integer(scaled_h[rem_idx_ordered])
+      )
+
+      if (nrow(packed) != length(remaining_idx) ||
+          any(!isTRUE(packed$packed) & packed$packed == FALSE, na.rm = TRUE)) {
+        return(list(fits = FALSE))
+      }
+
+      packed_items <- lapply(seq_along(rem_idx_ordered), function(k) {
+        row <- packed[packed$idx == (k - 1L), , drop = FALSE]
+        if (nrow(row) != 1L || !isTRUE(row$packed[[1]])) {
+          return(NULL)
+        }
+        list(
+          idx = rem_idx_ordered[k],
+          x = as.integer(row$x[[1]]),
+          y = as.integer(row$y[[1]]),
+          w = as.integer(row$w[[1]]),
+          h = as.integer(row$h[[1]])
+        )
+      })
+      packed_items <- Filter(Negate(is.null), packed_items)
+
+      if (length(packed_items) != length(remaining_idx)) {
+        return(list(fits = FALSE))
+      }
+
+      packed_width <- max(vapply(packed_items, function(item) item$x + item$w, numeric(1)))
+      packed_height <- max(vapply(packed_items, function(item) item$y + item$h, numeric(1)))
+
+      list(
+        fits = TRUE,
+        top_items = top_items,
+        packed_items = packed_items,
+        used_width = max(top_row_width, packed_width),
+        used_height = top_row_height + row_gap_px + packed_height
+      )
+    }
+
+    scale_upper <- min(
+      max_width_px / max(widths_raw),
+      max_height_px / max(heights_raw)
+    )
+    low <- 0
+    high <- scale_upper
+    best <- NULL
+
+    for (iter in seq_len(24)) {
+      mid <- (low + high) / 2
+      packed <- pack_hybrid(mid)
+      if (isTRUE(packed$fits)) {
+        best <- packed
+        low <- mid
+      } else {
+        high <- mid
+      }
+    }
+
+    if (is.null(best)) {
+      stop("Could not pack mosaic into the requested page size", call. = FALSE)
+    }
+
+    canvas <- magick::image_blank(
+      max(1L, as.integer(best$used_width)),
+      max(1L, as.integer(best$used_height)),
+      color = median_col
     )
 
-    if (length(candidates) == 0) {
-      # Need an extra row
-      rows <- c(rows, list(list(img_list[[i]])))
-      width_rows <- c(width_rows, list(w))
-      row_totals <- c(row_totals, w)
-      n_rows <- n_rows + 1L
-    } else {
-      # Pick the lightest row among valid candidates
-      best <- candidates[which.min(row_totals[candidates])]
-      gap <- if (length(rows[[best]]) > 0) 4 else 0
-      rows[[best]] <- c(rows[[best]], list(img_list[[i]]))
-      width_rows[[best]] <- c(width_rows[[best]], w)
-      row_totals[best] <- row_totals[best] + w + gap
+    all_item_heights <- c(
+      vapply(best$top_items, function(item) item$h, numeric(1)),
+      vapply(best$packed_items, function(item) item$h, numeric(1))
+    )
+    label_size <- NULL
+    if (!is.null(labels)) {
+      label_size <- max(14L, as.integer(stats::median(all_item_heights) * 0.22))
     }
+
+    for (item in best$top_items) {
+      img <- magick::image_resize(
+        img_list[[item$idx]],
+        paste0(item$w, "x", item$h, "!")
+      )
+      if (!is.null(labels)) {
+        img <- magick::image_annotate(
+          img, labels[item$idx], size = label_size, color = "black",
+          location = "+3+1", weight = 700
+        )
+      }
+      canvas <- magick::image_composite(
+        canvas, img,
+        offset = paste0("+", item$x, "+", item$y)
+      )
+    }
+
+    top_band_height <- if (length(best$top_items) > 0) {
+      max(vapply(best$top_items, function(item) item$h, numeric(1))) + row_gap_px
+    } else {
+      0L
+    }
+    lower_height <- max(0L, as.integer(best$used_height - top_band_height))
+
+    for (item in best$packed_items) {
+      img <- magick::image_resize(
+        img_list[[item$idx]],
+        paste0(item$w, "x", item$h, "!")
+      )
+      if (!is.null(labels)) {
+        img <- magick::image_annotate(
+          img, labels[item$idx], size = label_size, color = "black",
+          location = "+3+1", weight = 700
+        )
+      }
+      y_top <- top_band_height + (lower_height - item$y - item$h)
+      canvas <- magick::image_composite(
+        canvas, img,
+        offset = paste0("+", item$x, "+", y_top)
+      )
+    }
+
+    return(canvas)
+  } else {
+    # Read and resize to target height for the uniform-height taxon mosaics.
+    rows <- NULL
+    width_rows <- NULL
+    img_list <- lapply(img_list, function(img) {
+      magick::image_resize(img, paste0("x", target_height))
+    })
+    if (!is.null(labels)) {
+      font_size <- max(16L, as.integer(target_height * 0.28))
+      img_list <- mapply(function(img, lbl) {
+        magick::image_annotate(img, lbl, size = font_size, color = "black",
+                               location = "+3+1", weight = 700)
+      }, img_list, labels, SIMPLIFY = FALSE)
+    }
+    widths <- vapply(img_list, function(img) {
+      as.numeric(magick::image_info(img)$width)
+    }, numeric(1))
+
+    # Determine the minimum number of rows needed, accounting for 4px gaps.
+    total_content_width <- sum(widths) + max(0, (length(widths) - 1)) * gap_px
+    n_rows <- max(1L, ceiling(total_content_width / max_width_px))
+
+    # Balance rows for uniform-height single-taxon mosaics.
+    rows <- vector("list", n_rows)
+    width_rows <- vector("list", n_rows)
+    row_totals <- rep(0, n_rows)
+    for (k in seq_len(n_rows)) {
+      rows[[k]] <- list()
+      width_rows[[k]] <- numeric(0)
+    }
+
+    for (i in seq_along(img_list)) {
+      w <- widths[i]
+      candidates <- which(
+        vapply(rows, length, integer(1)) < tile_cols &
+          row_totals + w + ifelse(vapply(rows, length, integer(1)) > 0, gap_px, 0) <=
+            max_width_px
+      )
+
+      if (length(candidates) == 0) {
+        rows <- c(rows, list(list(img_list[[i]])))
+        width_rows <- c(width_rows, list(w))
+        row_totals <- c(row_totals, w)
+        n_rows <- n_rows + 1L
+      } else {
+        best <- candidates[which.min(row_totals[candidates])]
+        gap <- if (length(rows[[best]]) > 0) gap_px else 0
+        rows[[best]] <- c(rows[[best]], list(img_list[[i]]))
+        width_rows[[best]] <- c(width_rows[[best]], w)
+        row_totals[best] <- row_totals[best] + w + gap
+      }
+    }
+
+    non_empty <- vapply(rows, function(r) length(r) > 0, logical(1))
+    rows <- rows[non_empty]
+    width_rows <- width_rows[non_empty]
+
+    row_height_with_gap <- target_height + row_gap_px
+    max_rows <- max(1L, floor(max_height_px / row_height_with_gap))
+    if (length(rows) > max_rows) {
+      rows <- rows[seq_len(max_rows)]
+      width_rows <- width_rows[seq_len(max_rows)]
+    }
+
+    total_widths <- vapply(width_rows, function(w) {
+      sum(w) + max(0, (length(w) - 1) * gap_px)
+    }, numeric(1))
+    target_row_width <- min(max(total_widths), max_width_px)
+    row_heights <- rep(target_height, length(rows))
+    rows <- mapply(function(imgs_row, h) {
+      lapply(imgs_row, function(img) {
+        magick::image_resize(img, paste0("x", as.integer(round(h))))
+      })
+    }, rows, row_heights, SIMPLIFY = FALSE)
+    width_rows <- lapply(rows, function(imgs_row) {
+      vapply(imgs_row, function(img) {
+        as.numeric(magick::image_info(img)$width)
+      }, numeric(1))
+    })
   }
-
-  # Drop any empty rows (can happen when n_rows was overestimated)
-  non_empty <- vapply(rows, function(r) length(r) > 0, logical(1))
-  rows <- rows[non_empty]
-  width_rows <- width_rows[non_empty]
-
-  # Limit total mosaic height so it fits on approximately half an A4 page
-  row_height_with_gap <- target_height + 2  # 2px vertical gap between rows
-  max_rows <- max(1L, floor(max_height_px / row_height_with_gap))
-  if (length(rows) > max_rows) {
-    rows <- rows[seq_len(max_rows)]
-    width_rows <- width_rows[seq_len(max_rows)]
-  }
-
-  # Determine target row width (widest row, capped at max_width_px)
-  total_widths <- vapply(width_rows, function(w) {
-    sum(w) + max(0, (length(w) - 1) * 4)
-  }, numeric(1))
-  target_row_width <- min(max(total_widths), max_width_px)
 
   # Justify each row
   row_imgs <- mapply(
@@ -151,14 +477,14 @@ create_mosaic <- function(image_paths, n_images = 32L,
     rows, width_rows,
     MoreArgs = list(
       target_row_width = target_row_width,
-      target_height = target_height,
       bg_color = median_col
     ),
+    target_height = row_heights,
     SIMPLIFY = FALSE
   )
 
   # Stack rows vertically with a small gap
-  gap_strip <- magick::image_blank(target_row_width, 2, color = median_col)
+  gap_strip <- magick::image_blank(target_row_width, row_gap_px, color = median_col)
   parts <- list()
   for (i in seq_along(row_imgs)) {
     if (i > 1) parts <- c(parts, list(gap_strip))
@@ -271,6 +597,77 @@ get_taxon_rois <- function(classifications, taxa_lookup, taxon_name,
   ]
 }
 
+#' Extract IFCB PNGs with fallback if scale-bar rendering fails
+#'
+#' Retries extraction without a scale bar when the first attempt fails. This
+#' avoids losing taxa from mosaics due to edge cases in ROI rendering.
+#'
+#' @param roi_file Path to a .roi file.
+#' @param out_folder Output directory for extracted PNGs.
+#' @param roi_numbers Integer ROI numbers to extract.
+#' @param scale_bar_um Scale bar length in microns. Default 5.
+#' @param scale_micron_factor Optional microns-per-pixel factor.
+#' @return TRUE if an extraction attempt completed without error, FALSE
+#'   otherwise.
+#' @keywords internal
+extract_pngs_with_fallback <- function(roi_file, out_folder, roi_numbers,
+                                       scale_bar_um = 5,
+                                       scale_micron_factor = NULL) {
+  run_extract <- function(with_scale_bar) {
+    warned <- FALSE
+    ok <- tryCatch(
+      withCallingHandlers({
+        if (isTRUE(with_scale_bar)) {
+          iRfcb::ifcb_extract_pngs(
+            roi_file,
+            out_folder,
+            ROInumbers = roi_numbers,
+            verbose = FALSE,
+            scale_bar_um = scale_bar_um,
+            scale_micron_factor = scale_micron_factor
+          )
+        } else {
+          iRfcb::ifcb_extract_pngs(
+            roi_file,
+            out_folder,
+            ROInumbers = roi_numbers,
+            verbose = FALSE
+          )
+        }
+        TRUE
+      }, warning = function(w) {
+        warned <<- TRUE
+        invokeRestart("muffleWarning")
+      }),
+      error = function(e) FALSE
+    )
+    isTRUE(ok) && !warned
+  }
+
+  ok <- run_extract(with_scale_bar = TRUE)
+
+  if (ok) {
+    return(TRUE)
+  }
+
+  run_extract(with_scale_bar = FALSE)
+}
+
+#' Check whether an extracted PNG is readable
+#'
+#' @param path Path to a PNG file.
+#' @return TRUE if the file exists and can be read by magick.
+#' @keywords internal
+is_valid_extracted_png <- function(path) {
+  if (!file.exists(path)) {
+    return(FALSE)
+  }
+  tryCatch({
+    info <- magick::image_info(magick::image_read(path))
+    nrow(info) > 0 && info$width[[1]] > 0 && info$height[[1]] > 0
+  }, error = function(e) FALSE)
+}
+
 #' Extract a single random image for a taxon
 #'
 #' Picks one random ROI from the given taxon and extracts it as a PNG file.
@@ -283,12 +680,17 @@ get_taxon_rois <- function(classifications, taxa_lookup, taxon_name,
 #' @param temp_dir Temporary directory for extracted PNGs.
 #' @param exclude_rois Optional data.frame with \code{sample_name} and
 #'   \code{roi_number} columns to exclude from selection.
+#' @param scale_micron_factor Optional numeric microns-per-pixel factor for
+#'   drawing scale bars in extracted PNGs.
+#' @param scale_bar_um Scale bar length in microns. Default 5.
 #' @return A list with \code{path}, \code{taxon}, \code{sample_name},
 #'   \code{roi_number}, and \code{n_available}, or NULL if no image found.
 #' @export
 extract_random_taxon_image <- function(taxon_name, classifications, taxa_lookup,
                                        sample_ids, raw_data_path, temp_dir,
-                                       exclude_rois = NULL) {
+                                       exclude_rois = NULL,
+                                       scale_micron_factor = NULL,
+                                       scale_bar_um = 5) {
   rois <- get_taxon_rois(classifications, taxa_lookup, taxon_name, sample_ids)
   if (nrow(rois) == 0) return(NULL)
 
@@ -301,32 +703,40 @@ extract_random_taxon_image <- function(taxon_name, classifications, taxa_lookup,
     if (nrow(rois) == 0) return(NULL)
   }
 
-  idx <- sample(nrow(rois), 1)
-  samp <- rois$sample_name[idx]
-  roi_num <- rois$roi_number[idx]
-
-  roi_file <- list.files(raw_data_path, pattern = paste0(samp, "\\.roi$"),
-                         recursive = TRUE, full.names = TRUE)
-  if (length(roi_file) == 0) return(NULL)
-
+  rois <- rois[sample(seq_len(nrow(rois))), , drop = FALSE]
   out_folder <- file.path(temp_dir, "frontpage_extracted")
-  tryCatch(
-    iRfcb::ifcb_extract_pngs(roi_file[1], out_folder, ROInumbers = roi_num,
-                              verbose = FALSE),
-    error = function(e) return(NULL)
-  )
 
-  expected <- file.path(out_folder, samp,
-                        paste0(samp, "_", sprintf("%05d", roi_num), ".png"))
-  if (!file.exists(expected)) return(NULL)
+  for (i in seq_len(nrow(rois))) {
+    samp <- rois$sample_name[i]
+    roi_num <- rois$roi_number[i]
 
-  list(
-    path = expected,
-    taxon = taxon_name,
-    sample_name = samp,
-    roi_number = roi_num,
-    n_available = nrow(rois)
-  )
+    roi_file <- list.files(raw_data_path, pattern = paste0(samp, "\\.roi$"),
+                           recursive = TRUE, full.names = TRUE)
+    if (length(roi_file) == 0) next
+
+    ok <- extract_pngs_with_fallback(
+      roi_file = roi_file[1],
+      out_folder = out_folder,
+      roi_numbers = roi_num,
+      scale_bar_um = scale_bar_um,
+      scale_micron_factor = scale_micron_factor
+    )
+    if (!isTRUE(ok)) next
+
+    expected <- file.path(out_folder, samp,
+                          paste0(samp, "_", sprintf("%05d", roi_num), ".png"))
+    if (!is_valid_extracted_png(expected)) next
+
+    return(list(
+      path = expected,
+      taxon = taxon_name,
+      sample_name = samp,
+      roi_number = roi_num,
+      n_available = nrow(rois)
+    ))
+  }
+
+  NULL
 }
 
 #' Create mosaics for top taxa in a region
@@ -342,12 +752,17 @@ extract_random_taxon_image <- function(taxon_name, classifications, taxa_lookup,
 #' @param taxa_lookup Taxa lookup table.
 #' @param n_taxa Number of top taxa to create mosaics for.
 #' @param n_images Number of images per mosaic.
+#' @param scale_micron_factor Optional numeric microns-per-pixel factor for
+#'   drawing scale bars in extracted PNGs.
+#' @param scale_bar_um Scale bar length in microns. Default 5.
 #' @param temp_dir Temporary directory for extracted PNGs.
 #' @return A named list of magick image objects (names = taxon names).
 #' @export
 create_region_mosaics <- function(wide_summary, classifications, sample_ids,
                                   raw_data_path, taxa_lookup,
                                   n_taxa = 5L, n_images = 32L,
+                                  scale_micron_factor = NULL,
+                                  scale_bar_um = 5,
                                   temp_dir = tempdir()) {
   # Find top taxa by total biovolume
   data_cols <- names(wide_summary)[-1]
@@ -386,22 +801,21 @@ create_region_mosaics <- function(wide_summary, classifications, sample_ids,
 
       samp_rois <- taxon_rois$roi_number[taxon_rois$sample_name == samp]
 
-      tryCatch(
-        iRfcb::ifcb_extract_pngs(
-          roi_file[1],
-          out_folder,
-          ROInumbers = samp_rois,
-          verbose = FALSE
-        ),
-        error = function(e) NULL
+      ok <- extract_pngs_with_fallback(
+        roi_file = roi_file[1],
+        out_folder = out_folder,
+        roi_numbers = samp_rois,
+        scale_bar_um = scale_bar_um,
+        scale_micron_factor = scale_micron_factor
       )
+      if (!isTRUE(ok)) return(character(0))
 
       # Only collect the specific PNGs for the requested ROIs
       expected_files <- file.path(
         out_folder, samp,
         paste0(samp, "_", sprintf("%05d", samp_rois), ".png")
       )
-      expected_files[file.exists(expected_files)]
+      expected_files[vapply(expected_files, is_valid_extracted_png, logical(1))]
     })
     png_paths <- unlist(png_paths_list, use.names = FALSE)
 
@@ -425,6 +839,11 @@ create_region_mosaics <- function(wide_summary, classifications, sample_ids,
 #' @param raw_data_path Path to raw data directory (contains .roi files).
 #' @param non_bio Character vector of non-biological class names to exclude.
 #' @param n_images Number of taxa/images to include. Default 15.
+#' @param wide_summary Optional wide-format summary from
+#'   \code{create_wide_summary()} for ranking taxa by biovolume concentration.
+#' @param scale_micron_factor Optional numeric microns-per-pixel factor for
+#'   drawing scale bars in extracted PNGs.
+#' @param scale_bar_um Scale bar length in microns. Default 5.
 #' @param temp_dir Temporary directory for extracted PNGs.
 #' @return A list with \code{mosaic} (magick image) and \code{taxa}
 #'   (character vector of taxa in numbered order), or \code{NULL}.
@@ -432,17 +851,24 @@ create_region_mosaics <- function(wide_summary, classifications, sample_ids,
 generate_frontpage_mosaic <- function(classifications, taxa_lookup, samples,
                                       raw_data_path, non_bio,
                                       n_images = 15L,
+                                      wide_summary = NULL,
+                                      scale_micron_factor = NULL,
+                                      scale_bar_um = 5,
                                       temp_dir = tempdir()) {
-  region_class <- classifications[classifications$sample_name %in% samples, ]
-  region_class <- region_class[!region_class$class_name %in% non_bio, ]
+  if (!is.null(wide_summary) && nrow(wide_summary) > 0 && ncol(wide_summary) > 1) {
+    top_taxa <- get_top_taxa(wide_summary, n_taxa = n_images)
+  } else {
+    region_class <- classifications[classifications$sample_name %in% samples, ]
+    region_class <- region_class[!region_class$class_name %in% non_bio, ]
 
-  name_map <- stats::setNames(taxa_lookup$name, taxa_lookup$clean_names)
-  sci_names <- name_map[region_class$class_name]
-  sci_names <- sci_names[!is.na(sci_names)]
-  if (length(sci_names) == 0) return(NULL)
+    name_map <- stats::setNames(taxa_lookup$name, taxa_lookup$clean_names)
+    sci_names <- name_map[region_class$class_name]
+    sci_names <- sci_names[!is.na(sci_names)]
+    if (length(sci_names) == 0) return(NULL)
 
-  top_taxa <- utils::head(names(sort(table(sci_names), decreasing = TRUE)),
-                          n_images)
+    top_taxa <- utils::head(names(sort(table(sci_names), decreasing = TRUE)),
+                            n_images)
+  }
 
   fp_dir <- file.path(temp_dir, "algaware_frontpage_auto")
   dir.create(fp_dir, recursive = TRUE, showWarnings = FALSE)
@@ -450,7 +876,9 @@ generate_frontpage_mosaic <- function(classifications, taxa_lookup, samples,
   images <- list()
   for (taxon in top_taxa) {
     img_info <- extract_random_taxon_image(
-      taxon, classifications, taxa_lookup, samples, raw_data_path, fp_dir
+      taxon, classifications, taxa_lookup, samples, raw_data_path, fp_dir,
+      scale_micron_factor = scale_micron_factor,
+      scale_bar_um = scale_bar_um
     )
     if (!is.null(img_info)) images[[taxon]] <- img_info
   }
@@ -464,9 +892,10 @@ generate_frontpage_mosaic <- function(classifications, taxa_lookup, samples,
 
   mosaic <- tryCatch(
     create_mosaic(paths, n_images = length(paths),
-                  max_width_px = 1800L, target_height = 120L,
-                  max_height_px = 1100L, max_cols = Inf,
-                  labels = as.character(seq_along(paths))),
+                  max_width_px = 1800L, target_height = 150L,
+                  max_height_px = 1500L, max_cols = Inf,
+                  labels = as.character(seq_along(paths)),
+                  allow_taller_rows = TRUE),
     error = function(e) NULL
   )
   if (is.null(mosaic)) return(NULL)

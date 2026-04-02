@@ -11,6 +11,9 @@ generate_frontpage_mosaic(
   raw_data_path,
   non_bio,
   n_images = 15L,
+  wide_summary = NULL,
+  scale_micron_factor = NULL,
+  scale_bar_um = 5,
   temp_dir = tempdir()
 )
 }
@@ -26,6 +29,14 @@ generate_frontpage_mosaic(
 \item{non_bio}{Character vector of non-biological class names to exclude.}
 
 \item{n_images}{Number of taxa/images to include. Default 15.}
+
+\item{wide_summary}{Optional wide-format summary from
+\code{create_wide_summary()} for ranking taxa by biovolume concentration.}
+
+\item{scale_micron_factor}{Optional numeric microns-per-pixel factor for
+drawing scale bars in extracted PNGs.}
+
+\item{scale_bar_um}{Scale bar length in microns. Default 5.}
 
 \item{temp_dir}{Temporary directory for extracted PNGs.}
 }

@@ -21,6 +21,8 @@ generate_swedish_summary(
 
 \item{provider}{LLM provider (\code{"openai"} or \code{"gemini"}).
 NULL auto-detects.}
+
+\item{unclassified_fractions}{Optional per-sample fractions of unclassified detections supplied to the prompt.}
 }
 \value{
 Character string with Swedish summary.

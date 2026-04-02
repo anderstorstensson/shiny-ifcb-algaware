@@ -11,7 +11,8 @@ create_mosaic(
   target_height = 120L,
   max_height_px = 1500L,
   max_cols = NULL,
-  labels = NULL
+  labels = NULL,
+  allow_taller_rows = FALSE
 )
 }
 \arguments{
@@ -36,6 +37,10 @@ auto-detect from median aspect ratio.  Set to a high value (e.g.
 to annotate on each image.  Must be the same length as
 \code{image_paths}.  Labels are drawn after resizing so font size is
 consistent.}
+
+\item{allow_taller_rows}{Logical; if TRUE, rows with spare horizontal
+space are allowed to grow taller (up to limits) to improve readability of
+larger organisms in mixed mosaics. Default FALSE.}
 }
 \value{
 A \code{magick} image object.

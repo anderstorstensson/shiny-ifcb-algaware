@@ -38,8 +38,9 @@ create_biomass_maps <- function(station_summary) {
     ggplot2::theme(
       panel.background = ggplot2::element_rect(fill = "aliceblue"),
       axis.title = ggplot2::element_blank(),
-      legend.position = "bottom",
-      legend.key.width = ggplot2::unit(1.5, "cm"),
+      legend.position = "right",
+      legend.direction = "vertical",
+      legend.key.height = ggplot2::unit(1.8, "cm"),
       legend.title.position = "top",
       legend.title = ggplot2::element_text(hjust = 0.5)
     )
@@ -64,6 +65,12 @@ create_biomass_maps <- function(station_summary) {
       option = "mako", direction = -1,
       name = expression(paste("Biomass (", mu, "g C/L)"))
     ) +
+    ggplot2::guides(
+      color = ggplot2::guide_colorbar(
+        direction = "vertical",
+        title.position = "top"
+      )
+    ) +
     ggplot2::ggtitle("Total carbon biomass")
 
   chl_map <- base_map +
@@ -86,7 +93,13 @@ create_biomass_maps <- function(station_summary) {
       option = "cividis",
       name = expression(paste("Chl fluorescence (", mu, "g/L)"))
     ) +
-    ggplot2::ggtitle("Chlorophyll fluorescence")
+    ggplot2::guides(
+      color = ggplot2::guide_colorbar(
+        direction = "vertical",
+        title.position = "top"
+      )
+    ) +
+    ggplot2::ggtitle("FerryBox chlorophyll fluorescence")
 
   list(biomass_map = biomass_map, chl_map = chl_map)
 }
@@ -99,9 +112,31 @@ create_biomass_maps <- function(station_summary) {
 #'
 #' @param image_counts Data frame from \code{fetch_image_counts()} with
 #'   columns: latitude, longitude, n_images, ml_analyzed.
+#' @param legend_position Legend position. Default \code{"bottom"}.
 #' @return A ggplot object.
 #' @export
-create_image_count_map <- function(image_counts) {
+create_image_count_map <- function(image_counts, legend_position = "bottom") {
+  scientific_math_labels <- function(x) {
+    labs <- lapply(x, function(val) {
+      if (is.na(val)) return(quote(NA))
+      if (val == 0) return(quote(0))
+
+      expn <- floor(log10(abs(val)))
+      mant <- signif(val / (10^expn), 3)
+
+      if (isTRUE(all.equal(abs(mant), 1, tolerance = 1e-12))) {
+        if (mant < 0) {
+          bquote(-10^.(expn))
+        } else {
+          bquote(10^.(expn))
+        }
+      } else {
+        bquote(.(mant) %*% 10^.(expn))
+      }
+    })
+    as.expression(labs)
+  }
+
   world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 
   plot_data <- image_counts
@@ -111,12 +146,12 @@ create_image_count_map <- function(image_counts) {
     plot_data$images_per_liter <- plot_data$n_images /
       (plot_data$ml_analyzed / 1000)
     legend_name <- "Images/L"
-    plot_title <- "IFCB image concentration"
   } else {
     plot_data$images_per_liter <- plot_data$n_images
     legend_name <- "Image count"
-    plot_title <- "IFCB image counts"
   }
+
+  vertical_legend <- identical(legend_position, "right")
 
   ggplot2::ggplot() +
     ggplot2::geom_sf(data = world, fill = "gray95", color = "gray70") +
@@ -129,15 +164,21 @@ create_image_count_map <- function(image_counts) {
     ) +
     ggplot2::scale_color_viridis_c(
       option = "plasma",
-      name = legend_name
+      name = legend_name,
+      labels = scientific_math_labels
     ) +
-    ggplot2::ggtitle(plot_title) +
+    ggplot2::guides(color = ggplot2::guide_colorbar(
+      direction = if (vertical_legend) "vertical" else "horizontal",
+      title.position = "top"
+    )) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
       panel.background = ggplot2::element_rect(fill = "aliceblue"),
       axis.title = ggplot2::element_blank(),
-      legend.position = "bottom",
-      legend.key.width = ggplot2::unit(1.5, "cm"),
+      legend.position = legend_position,
+      legend.direction = if (vertical_legend) "vertical" else "horizontal",
+      legend.key.width = ggplot2::unit(if (vertical_legend) 0.6 else 1.5, "cm"),
+      legend.key.height = ggplot2::unit(if (vertical_legend) 1.8 else 0.4, "cm"),
       legend.title.position = "top",
       legend.title = ggplot2::element_text(hjust = 0.5)
     )

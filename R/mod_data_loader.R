@@ -125,6 +125,11 @@ process_classifications <- function(config, dirs, sample_ids, matched) {
 #' @keywords internal
 merge_ferrybox_data <- function(config, matched, station_summary) {
   chl_summary <- NULL
+  fb_data <- data.frame(
+    timestamp = matched$sample_time[0],
+    chl = numeric(0),
+    stringsAsFactors = FALSE
+  )
 
   if (nzchar(config$ferrybox_path)) {
     fb_data <- collect_ferrybox_data(
@@ -153,7 +158,11 @@ merge_ferrybox_data <- function(config, matched, station_summary) {
     }
   }
 
-  list(station_summary = station_summary, chl_summary = chl_summary)
+  list(
+    station_summary = station_summary,
+    chl_summary = chl_summary,
+    ferrybox_data = fb_data
+  )
 }
 
 #' Resolve the class list from database or auto-generate
@@ -313,17 +322,99 @@ mod_data_loader_server <- function(id, config, rv) {
           proc <- process_classifications(config, dirs, sample_ids, matched)
 
           if (is.null(proc)) {
-            status("No classifications found. Check classification path.")
-            shiny::showNotification("No classifications found",
-                                    type = "warning")
+            resolved_class_path <- resolve_classification_path(
+              config$classification_path
+            )
+            local_n <- length(list.files(
+              dirs$class_dir, pattern = "_class.*\\.h5$",
+              recursive = TRUE
+            ))
+            local_files <- list.files(
+              dirs$class_dir, pattern = "_class.*\\.h5$",
+              recursive = TRUE, full.names = FALSE
+            )
+            local_samples <- unique(sub("_class.*\\.h5$", "", basename(local_files)))
+            requested_samples <- unique(sample_ids)
+            matched_local <- intersect(requested_samples, local_samples)
+            missing_local <- setdiff(requested_samples, local_samples)
+
+            source_year_dirs <- if (nzchar(resolved_class_path) &&
+                                    dir.exists(resolved_class_path)) {
+              roots <- list.dirs(resolved_class_path,
+                                 recursive = FALSE,
+                                 full.names = FALSE)
+              sum(grepl("^class\\d{4}(_|$)", roots, ignore.case = TRUE))
+            } else {
+              NA_integer_
+            }
+
+            sample_example <- if (length(requested_samples) > 0) {
+              requested_samples[[1]]
+            } else {
+              ""
+            }
+            missing_example <- if (length(missing_local) > 0) {
+              missing_local[[1]]
+            } else {
+              ""
+            }
+            example_source_candidate <- if (nzchar(missing_example)) {
+              year <- substr(missing_example, 2, 5)
+              file.path(
+                resolved_class_path,
+                paste0("class", year, "_v3"),
+                paste0(missing_example, "_class.h5")
+              )
+            } else {
+              ""
+            }
+            msg <- paste0(
+              "No classifications found.\n",
+              "Source path: ", config$classification_path, "\n",
+              "Resolved source path: ", resolved_class_path, "\n",
+              "Source year folders (classYYYY*): ",
+              if (is.na(source_year_dirs)) "path missing/unreadable" else source_year_dirs, "\n",
+              "Local copied *_class*.h5 files: ", local_n, "\n",
+              "Requested sample IDs: ", length(requested_samples), "\n",
+              "Requested IDs found locally: ", length(matched_local), "\n",
+              if (nzchar(sample_example)) {
+                paste0("Example expected sample ID: ", sample_example, "\n")
+              } else {
+                ""
+              },
+              if (nzchar(missing_example)) {
+                paste0("Example requested ID missing locally: ", missing_example, "\n")
+              } else {
+                ""
+              },
+              if (nzchar(example_source_candidate)) {
+                paste0("Example expected source file: ", example_source_candidate, "\n")
+              } else {
+                ""
+              },
+              "Check that file basenames match sample IDs from metadata ",
+              "(e.g. DYYYYMMDDTHHMMSS_IFCB###_class.h5)."
+            )
+            status(msg)
+            shiny::showNotification(
+              "No classifications found (see sidebar status for details)",
+              type = "warning", duration = 10
+            )
             return()
           }
 
+          rv$matched_metadata_all <- matched
+          rv$matched_metadata <- matched
+          rv$classifications_raw_all <- proc$classifications_raw
           rv$classifications_raw <- proc$classifications_raw
+          rv$classifications_all <- proc$classifications
           rv$classifications <- proc$classifications
           rv$invalidated_classes <- proc$non_bio_classes
           rv$taxa_lookup <- proc$taxa_lookup
           rv$classifier_name <- proc$classifier_name
+          rv$excluded_samples <- character(0)
+          rv$frontpage_baltic_mosaic <- NULL
+          rv$frontpage_westcoast_mosaic <- NULL
 
           # Build descriptive cruise info from sample dates
           rv$cruise_info <- build_cruise_info(matched$sample_time)
@@ -331,16 +422,18 @@ mod_data_loader_server <- function(id, config, rv) {
           # Step 4a: Fetch cruise-wide image counts
           shiny::incProgress(0.05, detail = "Fetching image counts...")
           sample_dates <- as.Date(matched$sample_time)
-          rv$image_counts <- fetch_image_counts(
+          rv$image_counts_all <- fetch_image_counts(
             config$dashboard_url, config$dashboard_dataset,
             min(sample_dates), max(sample_dates)
           )
+          rv$image_counts <- rv$image_counts_all
 
           # Step 4b: Ferrybox data
           shiny::incProgress(0.05, detail = "Collecting ferrybox data...")
           fb_result <- merge_ferrybox_data(config, matched,
                                            proc$station_summary)
           rv$station_summary <- fb_result$station_summary
+          rv$ferrybox_data <- fb_result$ferrybox_data
           rv$ferrybox_chl <- fb_result$chl_summary
 
           # Step 5: Create summaries

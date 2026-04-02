@@ -59,14 +59,31 @@ ui <- bslib::page_sidebar(
     ),
 
     bslib::nav_panel(
-      "Front Page",
+      "Samples",
+      icon = shiny::icon("filter"),
+      conditionalPanel(
+        condition = "!output.data_loaded",
+        div(class = "empty-state",
+          shiny::icon("filter"),
+          h4("No samples available"),
+          p("Load data using the sidebar to review and exclude samples.")
+        )
+      ),
+      conditionalPanel(
+        condition = "output.data_loaded",
+        mod_samples_ui("samples")
+      )
+    ),
+
+    bslib::nav_panel(
+      "Images",
       icon = shiny::icon("file-image"),
       conditionalPanel(
         condition = "!output.data_loaded",
         div(class = "empty-state",
           shiny::icon("file-image"),
           h4("No data available"),
-          p("Load data using the sidebar to design the front page mosaic.")
+          p("Load data using the sidebar to design image mosaics.")
         )
       ),
       conditionalPanel(

@@ -12,6 +12,8 @@ create_region_mosaics(
   taxa_lookup,
   n_taxa = 5L,
   n_images = 32L,
+  scale_micron_factor = NULL,
+  scale_bar_um = 5,
   temp_dir = tempdir()
 )
 }
@@ -30,6 +32,11 @@ create_region_mosaics(
 \item{n_taxa}{Number of top taxa to create mosaics for.}
 
 \item{n_images}{Number of images per mosaic.}
+
+\item{scale_micron_factor}{Optional numeric microns-per-pixel factor for
+drawing scale bars in extracted PNGs.}
+
+\item{scale_bar_um}{Scale bar length in microns. Default 5.}
 
 \item{temp_dir}{Temporary directory for extracted PNGs.}
 }
