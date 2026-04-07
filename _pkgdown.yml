@@ -43,9 +43,12 @@ template:
 
 navbar:
   structure:
-    left: [intro, reference, articles]
+    left: [intro, reference, articles, news]
     right: [search, lightswitch, github]
   components:
+    reference:
+      text: Functions
+      href: reference/index.html
     github:
       icon: fa-github
       aria-label: GitHub
@@ -59,6 +62,8 @@ navbar:
           href: articles/workflow.html
         - text: Customising the Report
           href: articles/report-customisation.html
+        - text: Uploading Metadata to the IFCB Dashboard
+          href: articles/ifcb-dashboard-metadata.html
 
 articles:
   - title: Guides
@@ -67,6 +72,7 @@ articles:
       - installation
       - workflow
       - report-customisation
+      - ifcb-dashboard-metadata
 
 reference:
   - title: Launch Application
@@ -158,7 +164,6 @@ reference:
   - title: LLM Support
     desc: AI-powered report text generation
     contents:
-      - llm
       - llm_available
       - llm_provider
       - llm_providers

@@ -6,7 +6,22 @@
 \usage{
 resolve_classes(config, taxa_lookup, classifications)
 }
+\arguments{
+\item{config}{Reactive values with settings (\code{db_folder}).}
+
+\item{taxa_lookup}{Data frame with \code{clean_names} column.}
+
+\item{classifications}{Data frame with \code{class_name} column.}
+}
+\value{
+A list with \code{class_list} (character vector) and
+\code{auto_generated} (logical).
+}
 \description{
-Resolve the class list from database or auto-generate
+Tries to load the global class list from the configured SQLite database
+(shared with ClassiPyR). If no database is configured or it has no class
+list, auto-generates one from the union of all taxa lookup names and
+observed classification class names. The caller receives a flag indicating
+which path was taken so it can show a notification.
 }
 \keyword{internal}

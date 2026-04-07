@@ -6,7 +6,22 @@
 \usage{
 merge_ferrybox_data(config, matched, station_summary)
 }
+\arguments{
+\item{config}{Reactive values with settings (\code{ferrybox_path}).}
+
+\item{matched}{Station-matched metadata with \code{sample_time} column.}
+
+\item{station_summary}{Aggregated station data to receive \code{chl_mean}.}
+}
+\value{
+A list with \code{station_summary}, \code{chl_summary}, and
+\code{ferrybox_data} fields.
+}
 \description{
-Collect and merge ferrybox chlorophyll data
+Fetches ferrybox data for the cruise sample timestamps, extracts
+chlorophyll fluorescence (parameter 8063, QC-approved values only),
+and computes a per-station mean that is merged into \code{station_summary}.
+Returns an empty data frame (no error) when the ferrybox path is not
+configured or no matching data is found.
 }
 \keyword{internal}

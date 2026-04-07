@@ -38,6 +38,24 @@ mod_report_ui <- function(id) {
   )
 }
 
+#' Build the report readiness item list
+#'
+#' @param data_loaded Logical, whether IFCB data has been loaded.
+#' @param ctd_loaded Logical, whether CTD data has been loaded.
+#' @param baltic_mosaic Front-page Baltic mosaic or \code{NULL}.
+#' @param westcoast_mosaic Front-page West Coast mosaic or \code{NULL}.
+#' @return List of items with \code{ok} (logical) and \code{label} (character).
+#' @keywords internal
+build_readiness_items <- function(data_loaded, ctd_loaded,
+                                  baltic_mosaic, westcoast_mosaic) {
+  list(
+    list(ok = isTRUE(data_loaded),       label = "IFCB data loaded"),
+    list(ok = isTRUE(ctd_loaded),        label = "CTD data (load in CTD tab)"),
+    list(ok = !is.null(baltic_mosaic),   label = "Baltic mosaic (Images tab)"),
+    list(ok = !is.null(westcoast_mosaic),label = "West Coast mosaic (Images tab)")
+  )
+}
+
 #' Report Module Server
 #'
 #' @param id Module namespace ID.
@@ -52,15 +70,9 @@ mod_report_server <- function(id, rv, config) {
     corrections_path <- shiny::reactiveVal(NULL)
 
     output$report_readiness <- shiny::renderUI({
-      items <- list(
-        list(ok = isTRUE(rv$data_loaded),
-             label = "IFCB data loaded"),
-        list(ok = isTRUE(rv$ctd_loaded),
-             label = "CTD data (load in CTD tab)"),
-        list(ok = !is.null(rv$frontpage_baltic_mosaic),
-             label = "Baltic mosaic (Images tab)"),
-        list(ok = !is.null(rv$frontpage_westcoast_mosaic),
-             label = "West Coast mosaic (Images tab)")
+      items <- build_readiness_items(
+        rv$data_loaded, rv$ctd_loaded,
+        rv$frontpage_baltic_mosaic, rv$frontpage_westcoast_mosaic
       )
       shiny::tagList(
         shiny::tags$p(class = "small fw-semibold mb-1", "Report contents:"),

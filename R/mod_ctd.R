@@ -49,6 +49,58 @@ mod_ctd_ui <- function(id) {
   )
 }
 
+#' Filter a data frame to a date range
+#'
+#' Keeps rows where \code{sample_date} is non-NA and falls within
+#' \code{date_min} to \code{date_max} (inclusive). Used to restrict LIMS data
+#' to the cruise date window.
+#'
+#' @param df Data frame with a \code{sample_date} column.
+#' @param date_min Minimum date (inclusive).
+#' @param date_max Maximum date (inclusive).
+#' @return Row-filtered \code{df}, or \code{df} unchanged if empty.
+#' @keywords internal
+filter_lims_by_date_range <- function(df, date_min, date_max) {
+  if (is.null(df) || nrow(df) == 0) return(df)
+  df[!is.na(df$sample_date) &
+     df$sample_date >= date_min &
+     df$sample_date <= date_max, ]
+}
+
+#' Extract the current year from CTD data
+#'
+#' Returns the year of the most recent sample date, or the current year if no
+#' dates are available.
+#'
+#' @param ctd_data_full Data frame with a \code{sample_date} column.
+#' @return Integer year.
+#' @keywords internal
+extract_current_year_from_ctd <- function(ctd_data_full) {
+  dates <- ctd_data_full$sample_date[!is.na(ctd_data_full$sample_date)]
+  if (length(dates) > 0) {
+    as.integer(format(max(dates), "%Y"))
+  } else {
+    as.integer(format(Sys.Date(), "%Y"))
+  }
+}
+
+#' Compute plot height for a CTD region panel
+#'
+#' Height scales with the number of unique stations in the region so that
+#' dense regions get more vertical space.
+#'
+#' @param ctd_data_full Data frame with \code{canonical_name} and
+#'   \code{region} columns.
+#' @param region Character region name.
+#' @return Character CSS height string (e.g. \code{"780px"}).
+#' @keywords internal
+compute_region_plot_height <- function(ctd_data_full, region) {
+  n_unique <- length(unique(
+    ctd_data_full$canonical_name[ctd_data_full$region == region]
+  ))
+  paste0(max(300L, n_unique * 260L), "px")
+}
+
 #' CTD Module Server
 #'
 #' @param id Module namespace ID.
@@ -125,15 +177,8 @@ mod_ctd_server <- function(id, config, rv) {
             if (length(ctd_dates) > 0) {
               date_min <- min(ctd_dates) - 1L
               date_max <- max(ctd_dates) + 1L
-
-              filter_by_range <- function(df) {
-                if (is.null(df) || nrow(df) == 0) return(df)
-                df[!is.na(df$sample_date) &
-                   df$sample_date >= date_min &
-                   df$sample_date <= date_max, ]
-              }
-
-              lims_data <- filter_by_range(lims_data)
+              lims_data <- filter_lims_by_date_range(lims_data,
+                                                     date_min, date_max)
             }
           }
 
@@ -195,9 +240,7 @@ mod_ctd_server <- function(id, config, rv) {
     # Current year from CTD data
     current_year <- shiny::reactive({
       shiny::req(rv$ctd_data_full)
-      dates <- rv$ctd_data_full$sample_date[!is.na(rv$ctd_data_full$sample_date)]
-      if (length(dates) > 0) as.integer(format(max(dates), "%Y"))
-      else as.integer(format(Sys.Date(), "%Y"))
+      extract_current_year_from_ctd(rv$ctd_data_full)
     })
 
     # Regions present in loaded data (in YAML order)
@@ -220,10 +263,7 @@ mod_ctd_server <- function(id, config, rv) {
           sum(rv$ctd_data_full$region == reg)
         } else { 0L }
         # Height scales with station count in this region
-        n_unique <- length(unique(
-          rv$ctd_data_full$canonical_name[rv$ctd_data_full$region == reg]
-        ))
-        ht <- paste0(max(300L, n_unique * 260L), "px")
+        ht <- compute_region_plot_height(rv$ctd_data_full, reg)
         shiny::div(
           class = "plot-card",
           shiny::plotOutput(ns(paste0("region_plot_", i)), height = ht)

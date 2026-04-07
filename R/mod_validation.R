@@ -110,6 +110,10 @@ mod_validation_server <- function(id, rv, config) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # Keep rv$classifications_all (all samples, including excluded ones) in sync
+    # with rv$classifications (active samples only). Validation actions operate
+    # on the active slice; this helper propagates the same changes to the full
+    # dataset so that excluded samples are also corrected when re-included.
     update_full_classifications <- function(sample_names, roi_numbers, new_class) {
       if (is.null(rv$classifications_all) || nrow(rv$classifications_all) == 0) {
         return(invisible(NULL))

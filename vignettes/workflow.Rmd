@@ -43,6 +43,9 @@ the steps in order.
 Before starting, make sure you have completed the
 [installation and configuration](installation.html) steps.
 
+> **Network requirement:** This workflow requires access to the SMHI internal
+> network. Connect via the SMHI office network or SMHI VPN before proceeding.
+
 ---
 
 ## App layout
@@ -75,6 +78,9 @@ Open the **Data** panel in the sidebar (it is open by default).
 
 1. Choose **Cruise** or **Date Range** using the radio buttons.
    - *Cruise*: select the cruise number from the dropdown after fetching metadata.
+     For cruise numbers to appear, the yearly metadata file must have been
+     uploaded to the IFCB dashboard — see
+     [Uploading Metadata to the IFCB Dashboard](ifcb-dashboard-metadata.html).
    - *Date Range*: pick start and end dates.
 2. Click <span class="btn-badge badge-outline-primary">Fetch Metadata</span>.
    The app downloads the sample list from the IFCB Dashboard and populates the
@@ -127,7 +133,11 @@ The main panel switches to the **Validate** tab showing the image gallery.
 - **Class dropdown** — select a taxon to browse. Use the
   <span class="btn-badge badge-outline-secondary">◀</span> and
   <span class="btn-badge badge-outline-secondary">▶</span> arrows to step
-  through classes one at a time.
+  through classes one at a time. Each entry shows two names: the raw class name
+  as output by the classifier model, and a <span style="color: #17a2b8; font-style: italic;">clean taxonomic name in blue</span> — this
+  is the name images will be aggregated to in the report. Classes ending in
+  `-like` (or equivalent *cf.* classes) are mapped to the taxonomic level above
+  and merged with that parent taxon.
 - **Page size** — choose 50, 100, or 200 images per page.
 - <span class="btn-badge badge-outline-secondary">Select Page</span> — tick
   all images on the current page for a validation action.

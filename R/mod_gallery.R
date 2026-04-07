@@ -126,6 +126,21 @@ extract_gallery_pngs <- function(imgs, raw_dir, png_dir) {
   invisible(NULL)
 }
 
+#' Paginate a data frame of images
+#'
+#' @param imgs Data frame of images.
+#' @param page Integer page number (1-based).
+#' @param page_size Number of images per page.
+#' @return Row-subset of \code{imgs} for the requested page.
+#' @keywords internal
+paginate_images <- function(imgs, page, page_size) {
+  total_pages <- ceiling(nrow(imgs) / page_size)
+  p <- min(page, max(1L, total_pages))
+  start <- (p - 1L) * page_size + 1L
+  end <- min(p * page_size, nrow(imgs))
+  imgs[start:end, , drop = FALSE]
+}
+
 #' Gallery Module Server
 #'
 #' @param id Module namespace ID.
@@ -183,13 +198,7 @@ mod_gallery_server <- function(id, rv, config) {
     paginated <- shiny::reactive({
       imgs <- current_images()
       shiny::req(nrow(imgs) > 0)
-      ps <- as.integer(input$page_size)
-      p <- page()
-      total_pages <- ceiling(nrow(imgs) / ps)
-      p <- min(p, total_pages)
-      start <- (p - 1) * ps + 1
-      end <- min(p * ps, nrow(imgs))
-      imgs[start:end, ]
+      paginate_images(imgs, page(), as.integer(input$page_size))
     })
 
     # ---- PNG extraction ----

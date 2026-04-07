@@ -6,7 +6,14 @@
 \usage{
 sanitize_error_msg(msg)
 }
+\arguments{
+\item{msg}{Character string (typically \code{e$message}).}
+}
+\value{
+Simplified character string.
+}
 \description{
-Sanitize error message for user display
+Strips the leading "Error in \if{html}{\out{<call>}}: " prefix that R prepends to condition
+messages so that only the human-readable part is shown in the sidebar.
 }
 \keyword{internal}

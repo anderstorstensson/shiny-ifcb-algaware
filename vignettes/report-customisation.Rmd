@@ -138,20 +138,45 @@ behaviour.
 ### Adding taxa to the lookup table
 
 `inst/extdata/taxa_lookup.csv` controls how classifier class names are
-displayed and which taxa are treated as HAB species. Each row has:
+displayed, which taxa are treated as potentially harmful, and which taxa carry
+a recommended warning level. Each row has:
 
 | Column | Description |
 |--------|-------------|
-| `name` | Classifier class name (must match the `.h5` file exactly) |
-| `display_name` | Name shown in plots and reports |
-| `aphia_id` | WoRMS AphiaID (for reference) |
+| `clean_names` | Classifier class name — must match the `.h5` file exactly |
+| `name` | Scientific name shown in plots and reports |
+| `sflag` | Optional qualifier appended to the name (e.g. `spp.`, `cf.`) |
+| `AphiaID` | WoRMS AphiaID (for reference) |
+| `HAB` | `TRUE` if the taxon is potentially harmful or toxic |
+| `warning_level` | Recommended alert threshold in cells/L (leave empty if not applicable) |
 | `italic` | `TRUE` if the name should be italicised (species/genus) |
-| `HAB` | `TRUE` if the taxon is a harmful algae species |
-| `sflag` | Optional qualifier appended to the name (e.g. `cf.`) |
 
 After adding a new taxon row and rebuilding, the taxon will appear in the
 gallery dropdown, be included in biovolume calculations, and be correctly
 formatted in reports.
+
+#### Warning levels
+
+The `warning_level` column sets a recommended abundance threshold (cells/L,
+i.e. images/L from the IFCB) above which the taxon should be flagged in the
+report. When a station's measured abundance for that taxon meets or exceeds the
+threshold:
+
+- The taxon is flagged `[WARNING]` in the LLM prompt data for that station.
+- The LLM is explicitly instructed to state the actual abundance and the
+  threshold value in the station description **and** in both summaries
+  (Swedish and English).
+- Warning levels are independent of the `HAB` flag — a taxon can have a
+  warning level without being flagged as HAB, and vice versa.
+
+Example entry for *Dinophysis acuminata* (warning at 1 500 cells/L):
+
+```
+clean_names,name,sflag,AphiaID,HAB,warning_level,italic
+Dinophysis_acuminata,Dinophysis acuminata,,109684,TRUE,1500,TRUE
+```
+
+Leave `warning_level` empty (not `0`) for taxa where no threshold applies.
 
 ### Adding stations permanently to the package
 

@@ -13,7 +13,8 @@ format_cruise_summary_for_prompt(
 \arguments{
 \item{station_summary}{Full station_summary data frame.}
 
-\item{taxa_lookup}{Optional taxa lookup with HAB column.}
+\item{taxa_lookup}{Optional taxa lookup with \code{HAB} and
+\code{warning_level} columns.}
 }
 \value{
 Character string with cruise-level overview.

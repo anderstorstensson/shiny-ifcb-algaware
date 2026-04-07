@@ -66,6 +66,54 @@ test_that("format_station_data_for_prompt produces expected output", {
   expect_true(grepl("Skeletonema marinoi", result))
 })
 
+test_that("ensure_hab_asterisks adds * after missing HAB taxa", {
+  taxa <- data.frame(
+    name = c("Dinophysis acuminata", "Pseudochattonella", "Aphanizomenon flos-aquae"),
+    italic = c(TRUE, TRUE, TRUE),
+    HAB = c(TRUE, TRUE, TRUE),
+    stringsAsFactors = FALSE
+  )
+  text <- "Dinophysis acuminata was observed along with Pseudochattonella spp. and Aphanizomenon flos-aquae."
+  result <- algaware:::ensure_hab_asterisks(text, taxa)
+  expect_true(grepl("Dinophysis acuminata\\*", result))
+  expect_true(grepl("Pseudochattonella spp\\.\\*", result))
+  expect_true(grepl("Aphanizomenon flos-aquae\\*", result))
+})
+
+test_that("ensure_hab_asterisks does not double-add asterisks", {
+  taxa <- data.frame(
+    name = "Dinophysis acuminata", italic = TRUE, HAB = TRUE,
+    stringsAsFactors = FALSE
+  )
+  text <- "Dinophysis acuminata* was present."
+  result <- algaware:::ensure_hab_asterisks(text, taxa)
+  expect_false(grepl("\\*\\*", result))
+  expect_true(grepl("Dinophysis acuminata\\*", result))
+})
+
+test_that("ensure_hab_asterisks matches abbreviated species names", {
+  taxa <- data.frame(
+    name = "Dinophysis acuminata", italic = TRUE, HAB = TRUE,
+    stringsAsFactors = FALSE
+  )
+  text <- "D. acuminata was present."
+  result <- algaware:::ensure_hab_asterisks(text, taxa)
+  expect_true(grepl("D\\. acuminata\\*", result))
+})
+
+test_that("ensure_hab_asterisks leaves non-HAB taxa unchanged", {
+  taxa <- data.frame(
+    name = c("Skeletonema marinoi", "Dinophysis acuminata"),
+    italic = c(TRUE, TRUE),
+    HAB = c(FALSE, TRUE),
+    stringsAsFactors = FALSE
+  )
+  text <- "Skeletonema marinoi dominated. Dinophysis acuminata was rare."
+  result <- algaware:::ensure_hab_asterisks(text, taxa)
+  expect_false(grepl("Skeletonema marinoi\\*", result))
+  expect_true(grepl("Dinophysis acuminata\\*", result))
+})
+
 test_that("llm_available returns logical", {
   result <- llm_available()
   expect_type(result, "logical")
@@ -457,4 +505,86 @@ test_that("format_cruise_summary_for_prompt includes chl when present", {
   result <- algaware:::format_cruise_summary_for_prompt(station_summary)
   expect_true(grepl("Chl", result))
   expect_true(grepl("2.75", result))
+})
+
+test_that("format_station_data_for_prompt flags taxa exceeding warning level", {
+  station_data <- data.frame(
+    STATION_NAME_SHORT = "BY5",
+    STATION_NAME = "BY5 Bornholm Deep",
+    COAST = "EAST",
+    visit_date = as.Date("2024-03-15"),
+    name = c("Dinophysis acuminata", "Skeletonema marinoi"),
+    sflag = c("", ""),
+    biovolume_mm3_per_liter = c(0.3, 0.5),
+    carbon_ug_per_liter = c(5.0, 8.0),
+    counts_per_liter = c(2000, 500),
+    stringsAsFactors = FALSE
+  )
+  taxa <- data.frame(
+    name = c("Dinophysis acuminata", "Skeletonema marinoi"),
+    sflag = c("", ""),
+    HAB = c(TRUE, FALSE),
+    warning_level = c(1500, NA),
+    italic = c(TRUE, TRUE),
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_station_data_for_prompt(station_data, taxa)
+  # Counts (2000) exceed threshold (1500) -> warning should appear
+  expect_true(grepl("WARNING", result))
+  expect_true(grepl("1500", result))
+  expect_true(grepl("IMPORTANT", result))
+})
+
+test_that("format_station_data_for_prompt does not flag taxa below warning level", {
+  station_data <- data.frame(
+    STATION_NAME_SHORT = "BY5",
+    STATION_NAME = "BY5 Bornholm Deep",
+    COAST = "EAST",
+    visit_date = as.Date("2024-03-15"),
+    name = "Dinophysis acuminata",
+    sflag = "",
+    biovolume_mm3_per_liter = 0.3,
+    carbon_ug_per_liter = 5.0,
+    counts_per_liter = 500,
+    stringsAsFactors = FALSE
+  )
+  taxa <- data.frame(
+    name = "Dinophysis acuminata",
+    sflag = "",
+    HAB = TRUE,
+    warning_level = 1500,
+    italic = TRUE,
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_station_data_for_prompt(station_data, taxa)
+  # Counts (500) below threshold (1500) -> no warning
+  expect_false(grepl("WARNING", result))
+  expect_false(grepl("IMPORTANT", result))
+})
+
+test_that("format_cruise_summary_for_prompt flags warning exceedances", {
+  station_summary <- data.frame(
+    STATION_NAME_SHORT = "BY5",
+    COAST = "EAST",
+    visit_date = as.Date("2024-03-15"),
+    visit_id = "BY5_v1",
+    name = "Dinophysis acuminata",
+    sflag = "",
+    biovolume_mm3_per_liter = 0.3,
+    carbon_ug_per_liter = 5.0,
+    counts_per_liter = 2000,
+    stringsAsFactors = FALSE
+  )
+  taxa <- data.frame(
+    name = "Dinophysis acuminata",
+    sflag = "",
+    HAB = TRUE,
+    warning_level = 1500,
+    italic = TRUE,
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_cruise_summary_for_prompt(station_summary, taxa)
+  expect_true(grepl("WARNING EXCEEDED", result))
+  expect_true(grepl("IMPORTANT", result))
+  expect_true(grepl("1500", result))
 })

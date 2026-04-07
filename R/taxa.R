@@ -65,9 +65,11 @@ build_relabel_choices <- function(db_class_list = character(0),
 #' in report generation. Only adds classes not already present.
 #'
 #' @param taxa_lookup Data frame with columns \code{clean_names},
-#'   \code{name}, \code{AphiaID}, \code{HAB}, \code{italic}.
-#' @param custom_classes Data frame with the same columns plus
-#'   \code{is_diatom}.
+#'   \code{name}, \code{AphiaID}, \code{HAB}, \code{warning_level},
+#'   \code{italic}.
+#' @param custom_classes Data frame with the same columns (except
+#'   \code{warning_level}) plus \code{is_diatom}. Custom entries
+#'   receive \code{warning_level = NA}.
 #' @return A new data frame combining both inputs (without duplicates).
 #' @export
 merge_custom_taxa <- function(taxa_lookup, custom_classes) {
@@ -88,9 +90,12 @@ merge_custom_taxa <- function(taxa_lookup, custom_classes) {
 
   if (nrow(new_entries) == 0) return(taxa_lookup)
 
-  # Ensure sflag column exists in both before binding
+  # Ensure sflag and warning_level columns exist in both before binding.
+  # Custom classes never carry warning levels, so they receive NA.
   if (!"sflag" %in% names(taxa_lookup)) taxa_lookup$sflag <- ""
   if (!"sflag" %in% names(new_entries)) new_entries$sflag <- ""
+  if (!"warning_level" %in% names(taxa_lookup)) taxa_lookup$warning_level <- NA_real_
+  if (!"warning_level" %in% names(new_entries)) new_entries$warning_level <- NA_real_
 
   rbind(taxa_lookup[, union(names(taxa_lookup), names(new_entries))],
         new_entries[, union(names(taxa_lookup), names(new_entries))])

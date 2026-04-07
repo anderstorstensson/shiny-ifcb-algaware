@@ -12,7 +12,22 @@ filter_and_match(
   extra_stations
 )
 }
+\arguments{
+\item{dashboard_metadata}{Data frame from \code{fetch_dashboard_metadata()}.}
+
+\item{selection_mode}{Character; \code{"cruise"} or \code{"date"}.}
+
+\item{cruise}{Cruise number string (used when \code{selection_mode = "cruise"}).}
+
+\item{date_range}{Length-2 Date vector (used when \code{selection_mode = "date"}).}
+
+\item{extra_stations}{List of extra station definitions (from settings).}
+}
+\value{
+A list with \code{matched} (data frame) and \code{cruise_info} (string).
+}
 \description{
-Filter and match metadata to stations
+Filters the full dashboard metadata by cruise number or date range and
+spatially matches the resulting bins to AlgAware monitoring stations.
 }
 \keyword{internal}

@@ -41,6 +41,16 @@ mod_data_loader_ui <- function(id) {
 }
 
 #' Filter and match metadata to stations
+#'
+#' Filters the full dashboard metadata by cruise number or date range and
+#' spatially matches the resulting bins to AlgAware monitoring stations.
+#'
+#' @param dashboard_metadata Data frame from \code{fetch_dashboard_metadata()}.
+#' @param selection_mode Character; \code{"cruise"} or \code{"date"}.
+#' @param cruise Cruise number string (used when \code{selection_mode = "cruise"}).
+#' @param date_range Length-2 Date vector (used when \code{selection_mode = "date"}).
+#' @param extra_stations List of extra station definitions (from settings).
+#' @return A list with \code{matched} (data frame) and \code{cruise_info} (string).
 #' @keywords internal
 filter_and_match <- function(dashboard_metadata, selection_mode, cruise,
                              date_range, extra_stations) {
@@ -65,6 +75,17 @@ filter_and_match <- function(dashboard_metadata, selection_mode, cruise,
 }
 
 #' Download raw data, features, and classification files
+#'
+#' Downloads .roi/.adc/.hdr raw files and feature CSVs from the IFCB Dashboard,
+#' then copies AI classification H5 files from the configured source path.
+#' All three destinations are subdirectories of \code{storage}:
+#' \code{raw/}, \code{features/}, and \code{classified/}.
+#'
+#' @param config Reactive values with settings (\code{dashboard_url},
+#'   \code{dashboard_dataset}, \code{classification_path}).
+#' @param sample_ids Character vector of sample PIDs to retrieve.
+#' @param storage Local base directory for downloaded files.
+#' @return A list with \code{raw_dir}, \code{feat_dir}, \code{class_dir} paths.
 #' @keywords internal
 download_all_data <- function(config, sample_ids, storage) {
   raw_dir <- file.path(storage, "raw")
@@ -89,6 +110,18 @@ download_all_data <- function(config, sample_ids, storage) {
 }
 
 #' Process classifications and compute station summaries
+#'
+#' Reads H5 classification files, computes biovolume data for each classified
+#' image, aggregates results by station visit, and extracts the classifier name
+#' from the first H5 file. Non-biological classes are excluded from biovolume
+#' but kept in the classification data frame for gallery display.
+#'
+#' @param config Reactive values with settings (\code{non_biological_classes},
+#'   \code{pixels_per_micron}).
+#' @param dirs List with \code{raw_dir}, \code{feat_dir}, \code{class_dir} paths.
+#' @param sample_ids Character vector of sample PIDs to process.
+#' @param matched Data frame of station-matched metadata.
+#' @return A named list, or NULL if no H5 classifications were found.
 #' @keywords internal
 process_classifications <- function(config, dirs, sample_ids, matched) {
   classifications <- read_h5_classifications(dirs$class_dir, sample_ids)
@@ -122,6 +155,18 @@ process_classifications <- function(config, dirs, sample_ids, matched) {
 }
 
 #' Collect and merge ferrybox chlorophyll data
+#'
+#' Fetches ferrybox data for the cruise sample timestamps, extracts
+#' chlorophyll fluorescence (parameter 8063, QC-approved values only),
+#' and computes a per-station mean that is merged into \code{station_summary}.
+#' Returns an empty data frame (no error) when the ferrybox path is not
+#' configured or no matching data is found.
+#'
+#' @param config Reactive values with settings (\code{ferrybox_path}).
+#' @param matched Station-matched metadata with \code{sample_time} column.
+#' @param station_summary Aggregated station data to receive \code{chl_mean}.
+#' @return A list with \code{station_summary}, \code{chl_summary}, and
+#'   \code{ferrybox_data} fields.
 #' @keywords internal
 merge_ferrybox_data <- function(config, matched, station_summary) {
   chl_summary <- NULL
@@ -166,6 +211,18 @@ merge_ferrybox_data <- function(config, matched, station_summary) {
 }
 
 #' Resolve the class list from database or auto-generate
+#'
+#' Tries to load the global class list from the configured SQLite database
+#' (shared with ClassiPyR). If no database is configured or it has no class
+#' list, auto-generates one from the union of all taxa lookup names and
+#' observed classification class names. The caller receives a flag indicating
+#' which path was taken so it can show a notification.
+#'
+#' @param config Reactive values with settings (\code{db_folder}).
+#' @param taxa_lookup Data frame with \code{clean_names} column.
+#' @param classifications Data frame with \code{class_name} column.
+#' @return A list with \code{class_list} (character vector) and
+#'   \code{auto_generated} (logical).
 #' @keywords internal
 resolve_classes <- function(config, taxa_lookup, classifications) {
   resolved_classes <- NULL
@@ -208,6 +265,12 @@ build_cruise_info <- function(sample_times) {
 }
 
 #' Sanitize error message for user display
+#'
+#' Strips the leading "Error in <call>: " prefix that R prepends to condition
+#' messages so that only the human-readable part is shown in the sidebar.
+#'
+#' @param msg Character string (typically \code{e$message}).
+#' @return Simplified character string.
 #' @keywords internal
 sanitize_error_msg <- function(msg) {
   sub("^.*: ", "", msg)

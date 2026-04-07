@@ -14,6 +14,11 @@ provides an interactive image gallery for reviewing and correcting AI classifier
 predictions, and generates Word reports with biomass maps, chlorophyll maps,
 heatmaps, image mosaics, and CTD fluorescence profiles.
 
+> **Intended use:** This application is developed for internal use at SMHI as
+> part of the Swedish national marine monitoring programme. It may be adapted
+> for use at other institutes operating IFCB instruments, though configuration
+> and data infrastructure will need to be adjusted accordingly.
+
 ## Installation
 
 Install from GitHub including all optional dependencies:

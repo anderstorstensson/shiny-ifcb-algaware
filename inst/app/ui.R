@@ -1,3 +1,25 @@
+# Shiny UI definition for AlgAware-IFCB
+#
+# Layout overview (bslib page_sidebar):
+#   Sidebar (width = 350):
+#     Settings accordion panel  -- mod_settings_ui
+#     Data accordion panel      -- mod_data_loader_ui
+#     Validate accordion panel  -- mod_validation_ui (conditionalPanel on data_loaded)
+#     Report accordion panel    -- mod_report_ui + chlorophyll source selector
+#
+#   Main panel (navset_card_tab, id = "main_tabs"):
+#     Validate  -- mod_gallery_ui  (image browsing and class navigation)
+#     Samples   -- mod_samples_ui  (sample exclusion table)
+#     Images    -- mod_frontpage_ui (front-page mosaic designer)
+#     Maps      -- image_count_map, biomass_map, chl_map (rendered in server.R)
+#     Plots     -- heatmaps + stacked bar charts (rendered in server.R)
+#     CTD       -- mod_ctd_ui (CTD profile + Chl-a time-series plots)
+#     Summary   -- DT summary table (rendered in server.R)
+#
+# All sidebar modules write to / read from the shared `rv` reactiveValues
+# defined in server.R.  Conditional visibility is gated on `output.data_loaded`,
+# which is a reactive in server.R that mirrors `rv$data_loaded`.
+
 ui <- bslib::page_sidebar(
   title = tags$div(
     style = "display: flex; align-items: center; width: 100%;",

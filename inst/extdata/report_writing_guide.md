@@ -80,6 +80,12 @@ Each station description follows a consistent pattern:
 - In English: say "potentially harmful taxon" (singular) or "potentially harmful taxa" (plural).
 - In Swedish: say "potentiellt skadligt taxon" (singular) or "potentiellt skadliga taxa" (plural). Use "potentiellt skadlig art" only when referring to a specific species.
 
+### Warning level exceedances
+Some potentially harmful taxa have recommended warning levels (cells/L). When the data indicates that a taxon has exceeded its warning level at a station, this MUST be explicitly stated in both the relevant station description and in both summaries (Swedish and English).
+- In English: "The abundance of [taxon]* was X cells/L at [station], exceeding the recommended warning level of Y cells/L."
+- In Swedish: "Förekomsten av [taxon]* uppgick till X celler/L vid [station], vilket överstiger den rekommenderade varningsnivån på Y celler/L."
+- Warning level exceedances are always serious findings and must be clearly communicated, regardless of whether the taxon is mentioned elsewhere in the description.
+
 ### Swedish terminology
 When writing in Swedish, use the correct Swedish terms:
 - "klorofyll" (not "chlorophyll")
@@ -96,7 +102,7 @@ When writing in Swedish, use the correct Swedish terms:
 - Do not include figure captions (these are added separately).
 - Do not include methodology descriptions.
 - Do not make up data or species that are not in the provided data.
-- Do not use exact numerical values for cell counts in the text -- use qualitative descriptions instead (high, low, moderate, abundant, etc.).
+- Do not use exact numerical values for cell counts in the text -- use qualitative descriptions instead (high, low, moderate, abundant, etc.). Exception: when a taxon exceeds its recommended warning level, you MUST state the actual abundance in cells/L (e.g. "2 000 cells/L, exceeding the warning level of 1 500 cells/L").
 - Do not reference "normal" chlorophyll ranges (we do not have reference values for ferrybox data). Instead, compare between stations.
 - Do not include depth-integrated chlorophyll values (0-10 m, 0-20 m) as these come from external sources not available to the IFCB.
 

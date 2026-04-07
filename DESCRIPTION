@@ -45,8 +45,10 @@ Suggests:
     patchwork (>= 1.3.0),
     rmarkdown,
     rnaturalearthdata,
+    spelling,
     testthat (>= 3.0.0),
     withr,
     yaml
 VignetteBuilder: knitr
 Config/testthat/edition: 3
+Language: en-GB

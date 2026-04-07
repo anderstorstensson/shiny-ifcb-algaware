@@ -23,6 +23,51 @@ mod_samples_ui <- function(id) {
   )
 }
 
+#' Build the sample summary table
+#'
+#' Transforms raw matched metadata into the display table used by the samples
+#' module. Pure function — no Shiny dependency.
+#'
+#' @param matched_metadata_all Data frame with at least columns \code{pid},
+#'   \code{STATION_NAME}, \code{STATION_NAME_SHORT}, \code{COAST}, and
+#'   \code{sample_time}.
+#' @param excluded_samples Character vector of PIDs currently excluded.
+#' @param raw_dir Path to the raw data directory containing \code{.roi} files,
+#'   or \code{NULL} to skip file-size lookup.
+#' @return A data frame with columns \code{Status}, \code{pid},
+#'   \code{STATION_NAME_SHORT}, \code{STATION_NAME}, \code{Region},
+#'   \code{Time}, and \code{ROI_MB}.
+#' @keywords internal
+build_sample_table <- function(matched_metadata_all, excluded_samples,
+                               raw_dir = NULL) {
+  samples <- unique(matched_metadata_all[, c(
+    "pid", "STATION_NAME", "STATION_NAME_SHORT", "COAST", "sample_time"
+  )])
+  samples <- samples[order(samples$sample_time, samples$STATION_NAME), ]
+  samples$Status <- ifelse(samples$pid %in% excluded_samples,
+                           "Excluded", "Included")
+  samples$Region <- ifelse(samples$COAST == "EAST", "Baltic Sea",
+                           ifelse(samples$COAST == "WEST", "West Coast",
+                                  samples$COAST))
+  samples$Time <- format(samples$sample_time, "%Y-%m-%d %H:%M:%S")
+
+  roi_sizes_mb <- rep(NA_real_, nrow(samples))
+  if (!is.null(raw_dir) && dir.exists(raw_dir)) {
+    roi_files <- list.files(raw_dir, pattern = "\\.roi$",
+                            recursive = TRUE, full.names = TRUE)
+    if (length(roi_files) > 0) {
+      roi_basenames <- tools::file_path_sans_ext(basename(roi_files))
+      roi_sizes <- file.size(roi_files) / (1024^2)
+      size_map <- stats::setNames(as.numeric(roi_sizes), roi_basenames)
+      roi_sizes_mb <- unname(size_map[samples$pid])
+    }
+  }
+  samples$ROI_MB <- roi_sizes_mb
+
+  samples[, c("Status", "pid", "STATION_NAME_SHORT", "STATION_NAME",
+              "Region", "Time", "ROI_MB")]
+}
+
 #' Sample Exclusion Module Server
 #'
 #' Provides a table of loaded samples and lets the user exclude selected
@@ -40,34 +85,8 @@ mod_samples_server <- function(id, rv, config) {
 
     sample_table <- shiny::reactive({
       shiny::req(rv$data_loaded, rv$matched_metadata_all)
-
-      samples <- unique(rv$matched_metadata_all[, c(
-        "pid", "STATION_NAME", "STATION_NAME_SHORT", "COAST", "sample_time"
-      )])
-      samples <- samples[order(samples$sample_time, samples$STATION_NAME), ]
-      samples$Status <- ifelse(samples$pid %in% rv$excluded_samples,
-                               "Excluded", "Included")
-      samples$Region <- ifelse(samples$COAST == "EAST", "Baltic Sea",
-                               ifelse(samples$COAST == "WEST", "West Coast",
-                                      samples$COAST))
-      samples$Time <- format(samples$sample_time, "%Y-%m-%d %H:%M:%S")
-
       raw_dir <- file.path(config$local_storage_path, "raw")
-      roi_sizes_mb <- rep(NA_real_, nrow(samples))
-      if (dir.exists(raw_dir)) {
-        roi_files <- list.files(raw_dir, pattern = "\\.roi$",
-                                recursive = TRUE, full.names = TRUE)
-        if (length(roi_files) > 0) {
-          roi_basenames <- tools::file_path_sans_ext(basename(roi_files))
-          roi_sizes <- file.size(roi_files) / (1024^2)
-          size_map <- stats::setNames(as.numeric(roi_sizes), roi_basenames)
-          roi_sizes_mb <- unname(size_map[samples$pid])
-        }
-      }
-      samples$ROI_MB <- roi_sizes_mb
-
-      samples[, c("Status", "pid", "STATION_NAME_SHORT", "STATION_NAME",
-                  "Region", "Time", "ROI_MB")]
+      build_sample_table(rv$matched_metadata_all, rv$excluded_samples, raw_dir)
     })
 
     output$sample_status <- shiny::renderUI({

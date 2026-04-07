@@ -13,7 +13,8 @@ format_station_data_for_prompt(
 \arguments{
 \item{station_data}{Data frame with station_summary rows for one visit.}
 
-\item{taxa_lookup}{Optional taxa lookup with HAB column.}
+\item{taxa_lookup}{Optional taxa lookup with \code{HAB} and
+\code{warning_level} columns.}
 }
 \value{
 Character string describing the station data.

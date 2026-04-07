@@ -171,7 +171,28 @@ generate_report <- function(output_path, station_summary,
       if (nzchar(annotator)) paste0(annotator, ".") else "the analyst."
     )
   }
-  doc <- officer::body_add_par(doc, intro, style = "Normal")
+  has_hab <- !is.null(taxa_lookup) &&
+    "HAB" %in% names(taxa_lookup) &&
+    any(taxa_lookup$HAB == TRUE, na.rm = TRUE)
+
+  normal_prop <- officer::fp_text(font.size = 11,
+                                  font.family = "Adobe Garamond Pro")
+  red_prop    <- officer::fp_text(font.size = 11, color = "red",
+                                  bold = TRUE,
+                                  font.family = "Adobe Garamond Pro")
+  intro_runs <- list(officer::ftext(intro, normal_prop))
+  if (has_hab) {
+    intro_runs <- c(intro_runs, list(
+      officer::ftext(" Taxa marked with ", normal_prop),
+      officer::ftext("*", red_prop),
+      officer::ftext(" are potentially toxic or harmful.", normal_prop)
+    ))
+  }
+  doc <- officer::body_add_fpar(doc,
+    do.call(officer::fpar, intro_runs),
+    style = "Normal"
+  )
+
   doc <- officer::body_add_break(doc)
 
   # Count total LLM steps for progress reporting
@@ -780,8 +801,22 @@ add_ctd_report_section <- function(doc, ctd_data_full, lims_data_full,
   list(doc = doc, fig_num = fig_num)
 }
 
-# Add a banner made from separate SMHI + ALGAWARE logos.
-# Falls back to legacy ALGAWARE_title.PNG if split logos are unavailable.
+#' Add a banner with SMHI and AlgAware logos
+#'
+#' Reads SMHI and ALGAWARE logo files from \code{inst/templates/logos/},
+#' trims whitespace, optionally adds baseline-alignment padding, and
+#' inserts them side-by-side as inline images in a centred paragraph.
+#' Falls back to the legacy \code{ALGAWARE_title.PNG} banner if the
+#' individual logos are unavailable.
+#'
+#' @param doc An rdocx object.
+#' @param center_pp A centred \code{fp_par} paragraph property object.
+#' @param cleanup Environment with a \code{files} character vector for
+#'   tracking temp files (may be NULL).
+#' @param logo_scale Numeric scaling factor applied to the base logo height.
+#'   Default 1.
+#' @return The modified rdocx object.
+#' @keywords internal
 add_report_banner <- function(doc, center_pp, cleanup = NULL,
                               logo_scale = 1) {
   prep_logo <- function(path, fallback_ratio, bottom_pad_px = 0L) {
@@ -992,6 +1027,20 @@ add_front_page <- function(doc, cleanup,
   doc
 }
 
+#' Build ftext objects for a taxon display name
+#'
+#' Returns a list of \code{officer::ftext} objects for use in an
+#' \code{officer::fpar} caption. If the taxon is flagged as italic in
+#' \code{taxa_lookup}, the genus/species part is formatted with
+#' \code{italic_prop} and any trailing sflag (e.g. "spp.") with
+#' \code{normal_prop}. Unknown taxa receive a single normal ftext.
+#'
+#' @param display_name Character display name (name + sflag combined).
+#' @param taxa_lookup Taxa lookup data frame with \code{name}, \code{sflag},
+#'   and \code{italic} columns.
+#' @param normal_prop An \code{officer::fp_text} properties object for normal text.
+#' @param italic_prop An \code{officer::fp_text} properties object for italic text.
+#' @return A list of \code{officer::ftext} objects.
 #' @noRd
 make_taxon_ftexts <- function(display_name, taxa_lookup, normal_prop, italic_prop) {
   if (is.null(taxa_lookup) || nrow(taxa_lookup) == 0) {

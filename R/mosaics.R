@@ -191,6 +191,10 @@ create_mosaic <- function(image_paths, n_images = 32L,
       )
     }
 
+    # Binary search for the largest uniform scale factor such that all images
+    # fit within the canvas bounds. 24 iterations give ~1/2^24 (~60 nm)
+    # precision relative to the initial upper bound, which is more than enough
+    # for pixel-level layout. `best` always holds the last successful layout.
     scale_upper <- min(
       max_width_px / max(widths_raw),
       max_height_px / max(heights_raw)
