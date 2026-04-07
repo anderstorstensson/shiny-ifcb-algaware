@@ -2,7 +2,10 @@
 
 Wrapper around
 [`officer::body_add_fpar`](https://davidgohel.github.io/officer/reference/body_add_fpar.html)
-that applies species name formatting when taxa_lookup is provided.
+that applies species name formatting when taxa_lookup is provided. An
+empty paragraph is inserted between consecutive paragraphs so that
+multi-region summaries (Baltic / West Coast) are visually separated in
+the Word document.
 
 ## Usage
 

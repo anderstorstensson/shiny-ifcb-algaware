@@ -12,7 +12,10 @@ create_mosaic(
   n_images = 32L,
   max_width_px = 1800L,
   target_height = 120L,
-  max_height_px = 1500L
+  max_height_px = 1500L,
+  max_cols = NULL,
+  labels = NULL,
+  allow_taller_rows = FALSE
 )
 ```
 
@@ -39,6 +42,24 @@ create_mosaic(
 
   Maximum mosaic height in pixels. Default 1500 (approximately half an
   A4 page at 300 dpi). Images are dropped to stay within this limit.
+
+- max_cols:
+
+  Maximum images per row, or `NULL` (default) to auto-detect from median
+  aspect ratio. Set to a high value (e.g. `Inf`) to pack purely by
+  width.
+
+- labels:
+
+  Optional character vector of labels (e.g. sequence numbers) to
+  annotate on each image. Must be the same length as `image_paths`.
+  Labels are drawn after resizing so font size is consistent.
+
+- allow_taller_rows:
+
+  Logical; if TRUE, rows with spare horizontal space are allowed to grow
+  taller (up to limits) to improve readability of larger organisms in
+  mixed mosaics. Default FALSE.
 
 ## Value
 

@@ -9,7 +9,8 @@ generate_swedish_summary(
   station_summary,
   taxa_lookup = NULL,
   cruise_info = "",
-  provider = NULL
+  provider = NULL,
+  unclassified_fractions = NULL
 )
 ```
 
@@ -30,6 +31,11 @@ generate_swedish_summary(
 - provider:
 
   LLM provider (`"openai"` or `"gemini"`). NULL auto-detects.
+
+- unclassified_fractions:
+
+  Optional per-sample fractions of unclassified detections supplied to
+  the prompt.
 
 ## Value
 

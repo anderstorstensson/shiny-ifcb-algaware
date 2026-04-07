@@ -1,6 +1,6 @@
-# Add a stacked bar section to the report
+# Add a stacked bar chart to the report (no page break, added by caller)
 
-Add a stacked bar section to the report
+Add a stacked bar chart to the report (no page break, added by caller)
 
 ## Usage
 

@@ -5,5 +5,12 @@ Add mosaic section to the report
 ## Usage
 
 ``` r
-add_mosaic_section(doc, mosaics, hab_species, region_label, cleanup)
+add_mosaic_section(
+  doc,
+  mosaics,
+  hab_species,
+  region_label,
+  cleanup,
+  taxa_lookup = NULL
+)
 ```

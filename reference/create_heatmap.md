@@ -18,7 +18,7 @@ create_heatmap(
 - wide_summary:
 
   Wide-format data from
-  [`create_wide_summary()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/create_wide_summary.md).
+  [`create_wide_summary()`](https://nodc-sweden.github.io/ifcb-algaware/reference/create_wide_summary.md).
 
 - taxa_lookup:
 

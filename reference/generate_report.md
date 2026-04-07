@@ -1,7 +1,8 @@
 # Generate the AlgAware Word report
 
 Creates a Word document with biomass maps, heatmaps, stacked bar charts,
-station sections, and image mosaics.
+station sections, and image mosaics. Optionally includes a front page
+with logo, diary number placeholder, and two summary mosaics.
 
 ## Usage
 
@@ -23,7 +24,20 @@ generate_report(
   llm_model = NULL,
   n_station_samples = NULL,
   llm_provider = NULL,
-  on_llm_progress = NULL
+  on_llm_progress = NULL,
+  frontpage_baltic_mosaic = NULL,
+  frontpage_westcoast_mosaic = NULL,
+  unclassified_fractions = NULL,
+  frontpage_baltic_taxa = NULL,
+  frontpage_westcoast_taxa = NULL,
+  report_number = NULL,
+  report_dnr = NULL,
+  ctd_data = NULL,
+  ctd_data_full = NULL,
+  lims_data = NULL,
+  lims_data_full = NULL,
+  chl_stats = NULL,
+  chl_map_source = "ferrybox"
 )
 ```
 
@@ -79,7 +93,7 @@ generate_report(
 - image_counts:
 
   Optional data frame from
-  [`fetch_image_counts()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/fetch_image_counts.md)
+  [`fetch_image_counts()`](https://nodc-sweden.github.io/ifcb-algaware/reference/fetch_image_counts.md)
   with cruise-wide image counts and coordinates for the track map.
 
 - total_bio_images:
@@ -106,6 +120,73 @@ generate_report(
 
   Optional callback function called before each LLM request with
   arguments `(step, total, detail)` for progress reporting.
+
+- frontpage_baltic_mosaic:
+
+  Optional magick image for the front page Baltic Sea mosaic. If NULL
+  (together with West Coast), no front page is generated.
+
+- frontpage_westcoast_mosaic:
+
+  Optional magick image for the front page West Coast mosaic.
+
+- unclassified_fractions:
+
+  Optional named list or data frame of unclassified proportion estimates
+  passed to the LLM prompts for context.
+
+- frontpage_baltic_taxa:
+
+  Optional character vector of taxa names matching the numbered images
+  in the Baltic mosaic (for captions).
+
+- frontpage_westcoast_taxa:
+
+  Optional character vector of taxa names matching the numbered images
+  in the West Coast mosaic.
+
+- report_number:
+
+  Optional report issue number (e.g. `"1"`).
+
+- report_dnr:
+
+  Optional diarienummer string for the front page (e.g. `"2026-1234"`).
+
+- ctd_data:
+
+  Optional CTD profile data from
+  [`read_cnv_folder()`](https://nodc-sweden.github.io/ifcb-algaware/reference/read_cnv_folder.md)
+  (AlgAware-matched, used for the chlorophyll map).
+
+- ctd_data_full:
+
+  Optional full CTD profile data from
+  [`read_cnv_folder_all()`](https://nodc-sweden.github.io/ifcb-algaware/reference/read_cnv_folder_all.md)
+  (all standard stations, used for the CTD section with regional
+  fluorescence profiles and time series).
+
+- lims_data:
+
+  Optional LIMS discrete Chl-a data from
+  [`read_lims_data()`](https://nodc-sweden.github.io/ifcb-algaware/reference/read_lims_data.md)
+  (AlgAware-matched, used for the chlorophyll map).
+
+- lims_data_full:
+
+  Optional LIMS data from
+  [`read_lims_data_all()`](https://nodc-sweden.github.io/ifcb-algaware/reference/read_lims_data_all.md)
+  (all standard stations, used for the CTD section time series).
+
+- chl_stats:
+
+  Optional historical statistics from
+  [`load_chl_statistics()`](https://nodc-sweden.github.io/ifcb-algaware/reference/load_chl_statistics.md).
+
+- chl_map_source:
+
+  Character; active chlorophyll map source: `"ferrybox"`, `"ctd"`,
+  `"lims"` (bottle, 0-20 m), or `"lims_hose"` (hose integrated, 0-10 m).
 
 ## Value
 

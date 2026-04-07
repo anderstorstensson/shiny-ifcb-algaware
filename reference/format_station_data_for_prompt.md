@@ -5,7 +5,11 @@ Format station data as a text summary for the LLM prompt
 ## Usage
 
 ``` r
-format_station_data_for_prompt(station_data, taxa_lookup = NULL)
+format_station_data_for_prompt(
+  station_data,
+  taxa_lookup = NULL,
+  unclassified_pct = NULL
+)
 ```
 
 ## Arguments
@@ -16,7 +20,7 @@ format_station_data_for_prompt(station_data, taxa_lookup = NULL)
 
 - taxa_lookup:
 
-  Optional taxa lookup with HAB column.
+  Optional taxa lookup with `HAB` and `warning_level` columns.
 
 ## Value
 

@@ -31,7 +31,7 @@ summarize_biovolumes(
 - classifications:
 
   A data.frame from
-  [`read_h5_classifications()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/read_h5_classifications.md).
+  [`read_h5_classifications()`](https://nodc-sweden.github.io/ifcb-algaware/reference/read_h5_classifications.md).
 
 - taxa_lookup:
 

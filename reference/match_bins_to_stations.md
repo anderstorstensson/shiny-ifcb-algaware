@@ -19,7 +19,7 @@ match_bins_to_stations(metadata, algaware_stations)
 - algaware_stations:
 
   A data.frame from
-  [`load_algaware_stations()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/load_algaware_stations.md).
+  [`load_algaware_stations()`](https://nodc-sweden.github.io/ifcb-algaware/reference/load_algaware_stations.md).
 
 ## Value
 

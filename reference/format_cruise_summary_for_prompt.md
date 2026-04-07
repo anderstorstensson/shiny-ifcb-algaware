@@ -5,7 +5,11 @@ Format cruise-level data summary for LLM prompt
 ## Usage
 
 ``` r
-format_cruise_summary_for_prompt(station_summary, taxa_lookup = NULL)
+format_cruise_summary_for_prompt(
+  station_summary,
+  taxa_lookup = NULL,
+  unclassified_fractions = NULL
+)
 ```
 
 ## Arguments
@@ -16,7 +20,7 @@ format_cruise_summary_for_prompt(station_summary, taxa_lookup = NULL)
 
 - taxa_lookup:
 
-  Optional taxa lookup with HAB column.
+  Optional taxa lookup with `HAB` and `warning_level` columns.
 
 ## Value
 

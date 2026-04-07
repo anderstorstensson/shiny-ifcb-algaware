@@ -14,6 +14,8 @@ create_region_mosaics(
   taxa_lookup,
   n_taxa = 5L,
   n_images = 32L,
+  scale_micron_factor = NULL,
+  scale_bar_um = 5,
   temp_dir = tempdir()
 )
 ```
@@ -23,7 +25,7 @@ create_region_mosaics(
 - wide_summary:
 
   Wide-format summary from
-  [`create_wide_summary()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/create_wide_summary.md).
+  [`create_wide_summary()`](https://nodc-sweden.github.io/ifcb-algaware/reference/create_wide_summary.md).
 
 - classifications:
 
@@ -49,6 +51,15 @@ create_region_mosaics(
 - n_images:
 
   Number of images per mosaic.
+
+- scale_micron_factor:
+
+  Optional numeric microns-per-pixel factor for drawing scale bars in
+  extracted PNGs.
+
+- scale_bar_um:
+
+  Scale bar length in microns. Default 5.
 
 - temp_dir:
 

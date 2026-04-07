@@ -9,7 +9,8 @@ generate_station_description(
   station_data,
   taxa_lookup = NULL,
   all_stations_summary = NULL,
-  provider = NULL
+  provider = NULL,
+  unclassified_pct = NULL
 )
 ```
 
@@ -30,6 +31,10 @@ generate_station_description(
 - provider:
 
   LLM provider (`"openai"` or `"gemini"`). NULL auto-detects.
+
+- unclassified_pct:
+
+  Optional per-class unclassified percentage info used for context.
 
 ## Value
 

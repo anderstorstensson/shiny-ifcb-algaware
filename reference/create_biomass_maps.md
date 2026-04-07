@@ -13,7 +13,7 @@ create_biomass_maps(station_summary)
 - station_summary:
 
   Aggregated station data from
-  [`aggregate_station_data()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/aggregate_station_data.md).
+  [`aggregate_station_data()`](https://nodc-sweden.github.io/ifcb-algaware/reference/aggregate_station_data.md).
 
 ## Value
 

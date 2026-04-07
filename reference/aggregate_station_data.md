@@ -14,7 +14,7 @@ aggregate_station_data(biovolume_data, metadata)
 - biovolume_data:
 
   Output from
-  [`summarize_biovolumes()`](https://anderstorstensson.github.io/shiny-ifcb-algaware/reference/summarize_biovolumes.md).
+  [`summarize_biovolumes()`](https://nodc-sweden.github.io/ifcb-algaware/reference/summarize_biovolumes.md).
 
 - metadata:
 

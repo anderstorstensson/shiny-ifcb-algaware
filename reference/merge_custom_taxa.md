@@ -14,11 +14,12 @@ merge_custom_taxa(taxa_lookup, custom_classes)
 - taxa_lookup:
 
   Data frame with columns `clean_names`, `name`, `AphiaID`, `HAB`,
-  `italic`.
+  `warning_level`, `italic`.
 
 - custom_classes:
 
-  Data frame with the same columns plus `is_diatom`.
+  Data frame with the same columns (except `warning_level`) plus
+  `is_diatom`. Custom entries receive `warning_level = NA`.
 
 ## Value
 

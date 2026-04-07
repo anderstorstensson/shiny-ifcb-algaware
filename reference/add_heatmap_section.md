@@ -1,6 +1,6 @@
-# Add a heatmap section to the report
+# Add a heatmap section to the report (own page)
 
-Add a heatmap section to the report
+Add a heatmap section to the report (own page)
 
 ## Usage
 

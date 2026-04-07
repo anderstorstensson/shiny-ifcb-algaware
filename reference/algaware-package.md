@@ -10,12 +10,11 @@ biomass plots, heatmaps, and image mosaics.
 
 Useful links:
 
-- <https://anderstorstensson.github.io/shiny-ifcb-algaware/>
+- <https://nodc-sweden.github.io/ifcb-algaware/>
 
-- <https://github.com/anderstorstensson/shiny-ifcb-algaware>
+- <https://github.com/nodc-sweden/ifcb-algaware>
 
-- Report bugs at
-  <https://github.com/anderstorstensson/shiny-ifcb-algaware/issues>
+- Report bugs at <https://github.com/nodc-sweden/ifcb-algaware/issues>
 
 ## Author
 
