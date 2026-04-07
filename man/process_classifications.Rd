@@ -6,7 +6,23 @@
 \usage{
 process_classifications(config, dirs, sample_ids, matched)
 }
+\arguments{
+\item{config}{Reactive values with settings (\code{non_biological_classes},
+\code{pixels_per_micron}).}
+
+\item{dirs}{List with \code{raw_dir}, \code{feat_dir}, \code{class_dir} paths.}
+
+\item{sample_ids}{Character vector of sample PIDs to process.}
+
+\item{matched}{Data frame of station-matched metadata.}
+}
+\value{
+A named list, or NULL if no H5 classifications were found.
+}
 \description{
-Process classifications and compute station summaries
+Reads H5 classification files, computes biovolume data for each classified
+image, aggregates results by station visit, and extracts the classifier name
+from the first H5 file. Non-biological classes are excluded from biovolume
+but kept in the classification data frame for gallery display.
 }
 \keyword{internal}

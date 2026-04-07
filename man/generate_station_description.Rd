@@ -8,7 +8,8 @@ generate_station_description(
   station_data,
   taxa_lookup = NULL,
   all_stations_summary = NULL,
-  provider = NULL
+  provider = NULL,
+  unclassified_pct = NULL
 )
 }
 \arguments{
@@ -20,6 +21,8 @@ generate_station_description(
 
 \item{provider}{LLM provider (\code{"openai"} or \code{"gemini"}).
 NULL auto-detects.}
+
+\item{unclassified_pct}{Optional per-class unclassified percentage info used for context.}
 }
 \value{
 Character string with station description in English.

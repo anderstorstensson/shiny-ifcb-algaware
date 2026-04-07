@@ -43,11 +43,13 @@ Each station description follows a consistent pattern:
 2. **Dominant groups**: State which groups dominate (diatoms, dinoflagellates, cyanobacteria, etc.).
    - Example: "Diatoms dominated among the larger cells."
 
-3. **Key species**: Name the most abundant species with their scientific names. After first mention, abbreviate genus to initial.
-   - Example: "The diatom Dactyliosolen fragilissimus was the most abundant species, followed by Cerataulina pelagica."
+3. **Key species by group**: Describe the most abundant species organized by four taxonomic groups: **diatoms**, **dinoflagellates**, **cyanobacteria**, and **others** (any taxa that do not belong to the first three groups, e.g. coccolithophores, silicoflagellates, euglenophytes). Present the groups in order of their abundance at the station -- mention the most dominant group first. Only mention groups that are actually present in the data; do not mention absent groups. When describing the "others" group, name the taxa by their specific identity rather than calling them "others". After first mention of a species, abbreviate genus to initial.
+   - Example: "Among the diatoms, Dactyliosolen fragilissimus was the most abundant species, followed by Cerataulina pelagica. Heterocapsa rotundata was the most common dinoflagellate."
+   - Example: "The cyanobacterium Aphanizomenon flosaquae* dominated the community. Among the diatoms, Skeletonema marinoi and Chaetoceros spp. were found in lower numbers."
+   - Example with others: "Diatoms dominated the community, with Skeletonema marinoi as the most abundant species. The coccolithophore Emiliania huxleyi and the silicoflagellate Dictyocha speculum were also present."
    - Subsequent mention: "D. fragilissimus", "C. pelagica"
 
-4. **Small cells**: Mention the smaller fraction separately if notable.
+4. **Small cells**: Mention the smaller fraction separately if notable (cryptomonads, small flagellates, coccolithophores when in the small size fraction).
    - Example: "The smaller cells were dominated by the coccolithophore Emiliania huxleyi."
    - Example: "The smaller cells were represented by different cryptomonads."
 
@@ -69,6 +71,7 @@ Each station description follows a consistent pattern:
 - Group-level names are not italicized: "diatoms", "dinoflagellates", "cyanobacteria", "coccolithophores"
 - Higher taxonomic groups: "Cryptomonadales", "Gymnodiniales", "Dictyochales"
 - Mark potentially harmful taxa with an asterisk (*) after the name
+- Species-group qualifiers (sflag): some taxa in the data are recorded at genus or group level and carry a qualifier such as "spp.", "sp.", or "group" (e.g. "Chaetoceros spp.", "Dinophysis sp.", "Pseudo-nitzschia group"). Always include this qualifier when writing the name. The qualifier is plain text and not italicized; only the genus/species epithet is in italics.
 
 ## Terminology
 
@@ -76,6 +79,12 @@ Each station description follows a consistent pattern:
 - Never use the term "HAB species" or "HAB-arter".
 - In English: say "potentially harmful taxon" (singular) or "potentially harmful taxa" (plural).
 - In Swedish: say "potentiellt skadligt taxon" (singular) or "potentiellt skadliga taxa" (plural). Use "potentiellt skadlig art" only when referring to a specific species.
+
+### Warning level exceedances
+Some potentially harmful taxa have recommended warning levels (cells/L). When the data indicates that a taxon has exceeded its warning level at a station, this MUST be explicitly stated in both the relevant station description and in both summaries (Swedish and English).
+- In English: "The abundance of [taxon]* was X cells/L at [station], exceeding the recommended warning level of Y cells/L."
+- In Swedish: "Förekomsten av [taxon]* uppgick till X celler/L vid [station], vilket överstiger den rekommenderade varningsnivån på Y celler/L."
+- Warning level exceedances are always serious findings and must be clearly communicated, regardless of whether the taxon is mentioned elsewhere in the description.
 
 ### Swedish terminology
 When writing in Swedish, use the correct Swedish terms:
@@ -93,20 +102,20 @@ When writing in Swedish, use the correct Swedish terms:
 - Do not include figure captions (these are added separately).
 - Do not include methodology descriptions.
 - Do not make up data or species that are not in the provided data.
-- Do not use exact numerical values for cell counts in the text -- use qualitative descriptions instead (high, low, moderate, abundant, etc.).
+- Do not use exact numerical values for cell counts in the text -- use qualitative descriptions instead (high, low, moderate, abundant, etc.). Exception: when a taxon exceeds its recommended warning level, you MUST state the actual abundance in cells/L (e.g. "2 000 cells/L, exceeding the warning level of 1 500 cells/L").
 - Do not reference "normal" chlorophyll ranges (we do not have reference values for ferrybox data). Instead, compare between stations.
 - Do not include depth-integrated chlorophyll values (0-10 m, 0-20 m) as these come from external sources not available to the IFCB.
 
 ## Example station descriptions
 
 ### West Coast station example
-"The species diversity was high but the total cell counts were low. The diatom genus Pseudo-nitzschia was found in highest cell counts among the larger cells. Only a few cells of dinoflagellates were noted. The coccolithophorid Emiliania huxleyi was rather numerous among the smaller cells."
+"The species diversity was high but the total cell counts were low. Among the diatoms, the genus Pseudo-nitzschia was found in highest cell counts. Only a few cells of dinoflagellates were noted. The smaller cells were dominated by the coccolithophore Emiliania huxleyi."
 
 ### Baltic station example
-"The phytoplankton diversity was low, but total cell numbers were relatively high. The diatom Dactyliosolen fragilissimus was the most abundant species, followed by Cerataulina pelagica and smaller taxa, including cells from the order Gymnodiniales."
+"The phytoplankton diversity was low, but total cell numbers were relatively high. Among the diatoms, Dactyliosolen fragilissimus was the most abundant species, followed by Cerataulina pelagica. The smaller cells were represented by cells from the order Gymnodiniales."
 
 ### Baltic station with potentially harmful taxon
-"Phytoplankton diversity and total cell numbers were low. Aphanizomenon flosaquae* and small taxa, including cells from the order Cryptomonadales, were relatively abundant."
+"Phytoplankton diversity and total cell numbers were low. The cyanobacterium Aphanizomenon flosaquae* was relatively abundant. The smaller cells were dominated by cryptomonads."
 
 ### Station with chlorophyll comparison
-"The total cell numbers and biodiversity were both high, and diatoms dominated the community. Dactyliosolen fragilissimus was the most abundant species, followed by Skeletonema marinoi. Chlorophyll fluorescence was the highest among all stations visited, consistent with the elevated biovolume detected by the IFCB."
+"The total cell numbers and biodiversity were both high. Among the diatoms, Dactyliosolen fragilissimus was the most abundant species, followed by Skeletonema marinoi. Heterocapsa rotundata was the most common dinoflagellate. Chlorophyll fluorescence was the highest among all stations visited, consistent with the elevated biovolume detected by the IFCB."

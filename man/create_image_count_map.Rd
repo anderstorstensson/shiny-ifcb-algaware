@@ -2,18 +2,21 @@
 % Please edit documentation in R/plots.R
 \name{create_image_count_map}
 \alias{create_image_count_map}
-\title{Create an image count map from cruise metadata}
+\title{Create an image concentration map from cruise metadata}
 \usage{
-create_image_count_map(image_counts)
+create_image_count_map(image_counts, legend_position = "bottom")
 }
 \arguments{
 \item{image_counts}{Data frame from \code{fetch_image_counts()} with
-columns: latitude, longitude, n_images.}
+columns: latitude, longitude, n_images, ml_analyzed.}
+
+\item{legend_position}{Legend position. Default \code{"bottom"}.}
 }
 \value{
 A ggplot object.
 }
 \description{
-Plots per-sample image counts along the cruise track, showing spatial
-distribution of cell abundance as measured by the IFCB.
+Plots per-sample image concentration (images per litre) along the cruise
+track, showing spatial distribution of cell abundance as measured by the
+IFCB.
 }

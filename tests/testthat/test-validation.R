@@ -20,8 +20,8 @@ test_that("get_region_context returns NULL class when no classes", {
     baltic_samples = "sample1",
     westcoast_samples = character(0),
     classifications = data.frame(
-      sample_name = "sample1",
-      class_name = "unclassified",
+      sample_name = character(0),
+      class_name = character(0),
       stringsAsFactors = FALSE
     ),
     current_class_idx = 1L
@@ -29,6 +29,23 @@ test_that("get_region_context returns NULL class when no classes", {
   result <- algaware:::get_region_context(rv)
   expect_null(result$current_class)
   expect_equal(length(result$classes), 0)
+})
+
+test_that("get_region_context includes unclassified in class list", {
+  rv <- list(
+    current_region = "EAST",
+    baltic_samples = "sample1",
+    westcoast_samples = character(0),
+    classifications = data.frame(
+      sample_name = c("sample1", "sample1"),
+      class_name = c("ClassA", "unclassified"),
+      stringsAsFactors = FALSE
+    ),
+    current_class_idx = 1L
+  )
+  result <- algaware:::get_region_context(rv)
+  expect_true("unclassified" %in% result$classes)
+  expect_true("ClassA" %in% result$classes)
 })
 
 test_that("get_region_context resolves EAST region correctly", {

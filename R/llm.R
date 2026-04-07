@@ -1,10 +1,49 @@
-#' LLM Text Generation for AlgAware Reports
+#' Ensure all HAB taxa in text are followed by an asterisk
 #'
-#' Functions for generating report text using OpenAI or Google Gemini.
-#' Requires either OPENAI_API_KEY or GEMINI_API_KEY to be set.
+#' Post-processes LLM-generated text to add a trailing \code{*} after any HAB
+#' taxon name that is missing one. This makes HAB marking deterministic
+#' regardless of whether the LLM remembered to include the asterisk.
 #'
-#' @name llm
-NULL
+#' Genus names (single word, e.g. \emph{Pseudochattonella}) also match their
+#' \emph{spp.} / \emph{sp.} form so the asterisk lands after the full mention
+#' rather than mid-name.  Abbreviated species names (e.g. \emph{D. acuminata})
+#' are matched alongside the full form.
+#'
+#' @param text Character string of plain text.
+#' @param taxa_lookup Data frame with columns \code{name} and \code{HAB}.
+#' @return Character string with asterisks added after every HAB taxon mention.
+#' @keywords internal
+ensure_hab_asterisks <- function(text, taxa_lookup) {
+  if (is.null(taxa_lookup) || nrow(taxa_lookup) == 0) return(text)
+  if (!"HAB" %in% names(taxa_lookup)) return(text)
+
+  hab_rows <- taxa_lookup[taxa_lookup$HAB == TRUE & nzchar(taxa_lookup$name), ]
+  if (nrow(hab_rows) == 0) return(text)
+
+  hab_names <- unique(hab_rows$name)
+
+  # Generate abbreviated forms for two-word species names (e.g. "D. acuminata")
+  species_names <- hab_names[grepl(" ", hab_names)]
+  abbreviations <- vapply(species_names, function(sp) {
+    parts <- strsplit(sp, " ", fixed = TRUE)[[1]]
+    paste0(substr(parts[1], 1, 1), ". ", paste(parts[-1], collapse = " "))
+  }, character(1))
+
+  all_names <- unique(c(hab_names, abbreviations))
+  # Match longest names first to prevent partial-name substitutions
+  all_names <- all_names[order(-nchar(all_names))]
+
+  for (nm in all_names) {
+    escaped <- gsub("([.\\\\|()\\[\\]\\{\\}^$+?])", "\\\\\\1", nm)
+    # For single-word genus names consume an optional trailing "spp." / "sp."
+    # so the asterisk lands after the full written form.
+    suffix <- if (!grepl(" ", nm)) "(?:\\s+spp?\\.)?" else ""
+    pattern <- paste0("(", escaped, suffix, ")(?!\\*)")
+    text <- gsub(pattern, "\\1*", text, perl = TRUE)
+  }
+
+  text
+}
 
 #' Build a formatted paragraph with italic species names and red HAB asterisks
 #'
@@ -87,6 +126,30 @@ format_report_paragraph <- function(text, taxa_lookup = NULL) {
     remaining <- substr(remaining, m + match_len, nchar(remaining))
   }
 
+  # Post-process: any bare asterisk remaining in "normal" pieces is a HAB
+  # marker the LLM placed without attaching it to a recognised species name.
+  # Extract each * and reclassify it as "hab" so all asterisks are red.
+  pieces <- unlist(lapply(pieces, function(p) {
+    if (p$type != "normal" || !grepl("\\*", p$text)) return(list(p))
+    result <- list()
+    remaining <- p$text
+    while (nzchar(remaining)) {
+      ast <- regexpr("\\*", remaining)
+      if (ast == -1) {
+        result <- c(result, list(list(text = remaining, type = "normal")))
+        break
+      }
+      if (ast > 1) {
+        result <- c(result, list(
+          list(text = substr(remaining, 1, ast - 1), type = "normal")
+        ))
+      }
+      result <- c(result, list(list(text = "*", type = "hab")))
+      remaining <- substr(remaining, ast + 1L, nchar(remaining))
+    }
+    result
+  }), recursive = FALSE)
+
   # Build fpar from pieces
   ftext_args <- lapply(pieces, function(p) {
     prop <- switch(p$type,
@@ -103,7 +166,9 @@ format_report_paragraph <- function(text, taxa_lookup = NULL) {
 #' Add a formatted paragraph to a Word document
 #'
 #' Wrapper around \code{officer::body_add_fpar} that applies species name
-#' formatting when taxa_lookup is provided.
+#' formatting when taxa_lookup is provided. An empty paragraph is inserted
+#' between consecutive paragraphs so that multi-region summaries (Baltic /
+#' West Coast) are visually separated in the Word document.
 #'
 #' @param doc An \code{rdocx} object.
 #' @param text Plain text string.
@@ -113,16 +178,26 @@ format_report_paragraph <- function(text, taxa_lookup = NULL) {
 #' @keywords internal
 add_formatted_par <- function(doc, text, taxa_lookup = NULL,
                               style = "Normal") {
+  # Deterministically add * after any HAB taxon the LLM forgot to mark
+  if (!is.null(taxa_lookup)) {
+    text <- ensure_hab_asterisks(text, taxa_lookup)
+  }
+
   # Split on double newlines to preserve paragraph breaks from LLM output
   paragraphs <- strsplit(text, "\n\\s*\n")[[1]]
   paragraphs <- trimws(paragraphs)
   paragraphs <- paragraphs[nzchar(paragraphs)]
 
-  for (para in paragraphs) {
+  for (i in seq_along(paragraphs)) {
+    # Insert blank separator between consecutive paragraphs (e.g. between
+    # the Baltic Sea and West Coast sections in the summaries)
+    if (i > 1) {
+      doc <- officer::body_add_par(doc, "", style = "Normal")
+    }
     if (is.null(taxa_lookup)) {
-      doc <- officer::body_add_par(doc, para, style = style)
+      doc <- officer::body_add_par(doc, paragraphs[[i]], style = style)
     } else {
-      fp <- format_report_paragraph(para, taxa_lookup)
+      fp <- format_report_paragraph(paragraphs[[i]], taxa_lookup)
       doc <- officer::body_add_fpar(doc, fp, style = style)
     }
   }
@@ -199,10 +274,12 @@ load_writing_guide <- function() {
 #' Format station data as a text summary for the LLM prompt
 #'
 #' @param station_data Data frame with station_summary rows for one visit.
-#' @param taxa_lookup Optional taxa lookup with HAB column.
+#' @param taxa_lookup Optional taxa lookup with \code{HAB} and
+#'   \code{warning_level} columns.
 #' @return Character string describing the station data.
 #' @keywords internal
-format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
+format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL,
+                                           unclassified_pct = NULL) {
   station_name <- station_data$STATION_NAME_SHORT[1]
   full_name <- station_data$STATION_NAME[1]
   coast <- station_data$COAST[1]
@@ -233,36 +310,107 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
   top_n <- min(15, nrow(station_data))
   top_taxa <- station_data[seq_len(top_n), ]
 
-  # Identify HAB species
+  # Compute display names (name + sflag) for each row
+  make_display <- function(df) {
+    sflag <- if ("sflag" %in% names(df)) df$sflag else ""
+    sflag[is.na(sflag)] <- ""
+    trimws(paste(df$name, sflag))
+  }
+  station_data$display_name <- make_display(station_data)
+  top_taxa$display_name <- station_data$display_name[seq_len(nrow(top_taxa))]
+
+  # Identify HAB species (using display names)
   hab_species <- character(0)
   if (!is.null(taxa_lookup) && "HAB" %in% names(taxa_lookup)) {
-    hab_names <- taxa_lookup$name[taxa_lookup$HAB == TRUE]
-    hab_species <- intersect(station_data$name, hab_names)
+    sflag_lu <- if ("sflag" %in% names(taxa_lookup)) taxa_lookup$sflag else ""
+    sflag_lu[is.na(sflag_lu)] <- ""
+    hab_display <- trimws(paste(taxa_lookup$name, sflag_lu))[taxa_lookup$HAB == TRUE]
+    hab_species <- intersect(station_data$display_name, hab_display)
+  }
+
+  # Build a named numeric vector: display_name -> warning_level threshold (cells/L)
+  # Only includes taxa that have a non-NA warning_level in taxa_lookup.
+  warning_thresholds <- numeric(0)
+  if (!is.null(taxa_lookup) && "warning_level" %in% names(taxa_lookup)) {
+    sflag_lu <- if ("sflag" %in% names(taxa_lookup)) taxa_lookup$sflag else ""
+    sflag_lu[is.na(sflag_lu)] <- ""
+    lu_display <- trimws(paste(taxa_lookup$name, sflag_lu))
+    wl <- taxa_lookup$warning_level
+    has_wl <- !is.na(wl) & nzchar(as.character(wl))
+    warning_thresholds <- setNames(as.numeric(wl[has_wl]), lu_display[has_wl])
   }
 
   # Build taxa table
   taxa_lines <- vapply(seq_len(nrow(top_taxa)), function(i) {
     row <- top_taxa[i, ]
-    hab_flag <- if (row$name %in% hab_species) " [HAB]" else ""
+    hab_flag <- if (row$display_name %in% hab_species) " [HAB]" else ""
+    # Flag taxa that exceed their warning threshold at this station
+    warn_flag <- ""
+    if (row$display_name %in% names(warning_thresholds)) {
+      thresh <- warning_thresholds[[row$display_name]]
+      if (!is.na(thresh) && row$counts_per_liter >= thresh) {
+        warn_flag <- sprintf(" [WARNING: %.0f cells/L, threshold %.0f cells/L]",
+                             row$counts_per_liter, thresh)
+      }
+    }
     pct <- if (total_biovolume > 0) {
       sprintf("%.1f%%", row$biovolume_mm3_per_liter / total_biovolume * 100)
     } else {
       "0%"
     }
-    sprintf("  %s%s: %.3f mm3/L (%s of total), %.0f counts/L",
-            row$name, hab_flag,
+    sprintf("  %s%s%s: %.3f mm3/L (%s of total), %.0f counts/L",
+            row$display_name, hab_flag, warn_flag,
             row$biovolume_mm3_per_liter, pct,
             row$counts_per_liter)
   }, character(1))
 
-  # Additional HAB species in lower abundances
-  hab_in_sample <- station_data$name[station_data$name %in% hab_species]
-  hab_not_in_top <- setdiff(hab_in_sample, top_taxa$name)
+  # Additional HAB species in lower abundances (not in top_n)
+  hab_in_sample <- station_data$display_name[station_data$display_name %in% hab_species]
+  hab_not_in_top <- setdiff(hab_in_sample, top_taxa$display_name)
   hab_extra <- ""
   if (length(hab_not_in_top) > 0) {
     hab_extra <- paste0(
       "\nOther HAB species present (lower abundance): ",
       paste(hab_not_in_top, collapse = ", ")
+    )
+  }
+
+  # Collect all taxa (including those outside the top_n) that exceed a warning level
+  warning_exceeded <- character(0)
+  if (length(warning_thresholds) > 0) {
+    for (dn in names(warning_thresholds)) {
+      idx <- which(station_data$display_name == dn)
+      if (length(idx) > 0) {
+        counts <- station_data$counts_per_liter[idx[1]]
+        thresh <- warning_thresholds[[dn]]
+        if (!is.na(counts) && !is.na(thresh) && counts >= thresh) {
+          warning_exceeded <- c(warning_exceeded,
+            sprintf("%s (%.0f cells/L, threshold %.0f cells/L)", dn, counts, thresh))
+        }
+      }
+    }
+  }
+  warning_note <- ""
+  if (length(warning_exceeded) > 0) {
+    warning_note <- paste0(
+      "\nIMPORTANT -- Taxa exceeding recommended warning levels at this station:\n",
+      paste0("  ", warning_exceeded, collapse = "\n"),
+      "\nYou MUST explicitly state in the description that the abundance of ",
+      "these taxa exceeds the recommended warning level."
+    )
+  }
+
+  # Note about high unclassified fraction
+  unclass_note <- ""
+  if (!is.null(unclassified_pct) && unclassified_pct > 80) {
+    unclass_note <- sprintf(
+      "\nNOTE: %.0f%% of all images at this station were unclassified. ",
+      unclassified_pct
+    )
+    unclass_note <- paste0(
+      unclass_note,
+      "This means the classified taxa above represent only a small fraction ",
+      "of the total phytoplankton community. Mention this in the description."
     )
   }
 
@@ -277,25 +425,49 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL) {
     if (nzchar(chl_info)) paste0(chl_info, "\n") else "",
     "\nTop taxa by biovolume:\n",
     paste(taxa_lines, collapse = "\n"),
-    hab_extra
+    hab_extra,
+    warning_note,
+    unclass_note
   )
 }
 
 #' Format cruise-level data summary for LLM prompt
 #'
 #' @param station_summary Full station_summary data frame.
-#' @param taxa_lookup Optional taxa lookup with HAB column.
+#' @param taxa_lookup Optional taxa lookup with \code{HAB} and
+#'   \code{warning_level} columns.
 #' @return Character string with cruise-level overview.
 #' @keywords internal
-format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL) {
+format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL,
+                                              unclassified_fractions = NULL) {
   visits <- unique(station_summary[, c("STATION_NAME_SHORT", "COAST",
                                         "visit_date", "visit_id")])
   visits <- visits[order(visits$COAST, visits$visit_date), ]
 
-  # HAB species lookup
+  # HAB species lookup (using display names)
   hab_species <- character(0)
   if (!is.null(taxa_lookup) && "HAB" %in% names(taxa_lookup)) {
-    hab_species <- taxa_lookup$name[taxa_lookup$HAB == TRUE]
+    sflag_lu <- if ("sflag" %in% names(taxa_lookup)) taxa_lookup$sflag else ""
+    sflag_lu[is.na(sflag_lu)] <- ""
+    hab_species <- trimws(paste(taxa_lookup$name, sflag_lu))[taxa_lookup$HAB == TRUE]
+  }
+
+  # Warning level lookup: named numeric vector display_name -> threshold (cells/L)
+  warning_thresholds <- numeric(0)
+  if (!is.null(taxa_lookup) && "warning_level" %in% names(taxa_lookup)) {
+    sflag_lu <- if ("sflag" %in% names(taxa_lookup)) taxa_lookup$sflag else ""
+    sflag_lu[is.na(sflag_lu)] <- ""
+    lu_display <- trimws(paste(taxa_lookup$name, sflag_lu))
+    wl <- taxa_lookup$warning_level
+    has_wl <- !is.na(wl) & nzchar(as.character(wl))
+    warning_thresholds <- setNames(as.numeric(wl[has_wl]), lu_display[has_wl])
+  }
+
+  # Helper to compute display names for a data frame
+  make_display <- function(df) {
+    sflag <- if ("sflag" %in% names(df)) df$sflag else ""
+    sflag[is.na(sflag)] <- ""
+    trimws(paste(df$name, sflag))
   }
 
   # Per-station summaries
@@ -303,6 +475,7 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
     v <- visits[i, ]
     sdata <- station_summary[station_summary$visit_id == v$visit_id, ]
     sdata <- sdata[order(-sdata$biovolume_mm3_per_liter), ]
+    sdata$display_name <- make_display(sdata)
 
     total_bv <- sum(sdata$biovolume_mm3_per_liter, na.rm = TRUE)
     total_carbon <- sum(sdata$carbon_ug_per_liter, na.rm = TRUE)
@@ -312,14 +485,35 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
     # Top 5 species
     top5 <- head(sdata, 5)
     top_names <- vapply(seq_len(nrow(top5)), function(j) {
-      hab_flag <- if (top5$name[j] %in% hab_species) "*" else ""
-      paste0(top5$name[j], hab_flag)
+      hab_flag <- if (top5$display_name[j] %in% hab_species) "*" else ""
+      paste0(top5$display_name[j], hab_flag)
     }, character(1))
 
     # HAB present
-    hab_found <- intersect(sdata$name, hab_species)
+    hab_found <- intersect(sdata$display_name, hab_species)
     hab_note <- if (length(hab_found) > 0) {
       paste0(" | HAB: ", paste(hab_found, collapse = ", "))
+    } else {
+      ""
+    }
+
+    # Warning level exceedances at this station
+    warn_exceeded <- character(0)
+    if (length(warning_thresholds) > 0) {
+      for (dn in names(warning_thresholds)) {
+        idx <- which(sdata$display_name == dn)
+        if (length(idx) > 0) {
+          counts <- sdata$counts_per_liter[idx[1]]
+          thresh <- warning_thresholds[[dn]]
+          if (!is.na(counts) && !is.na(thresh) && counts >= thresh) {
+            warn_exceeded <- c(warn_exceeded,
+              sprintf("%s (%.0f>=%.0f cells/L)", dn, counts, thresh))
+          }
+        }
+      }
+    }
+    warn_note <- if (length(warn_exceeded) > 0) {
+      paste0(" | WARNING EXCEEDED: ", paste(warn_exceeded, collapse = ", "))
     } else {
       ""
     }
@@ -334,14 +528,56 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
     }
 
     region <- if (v$COAST == "EAST") "Baltic" else "West"
-    sprintf("  %s (%s, %s): %d taxa, %.0f counts/L, %.4f mm3/L biovol, %.2f ug/L carbon | Top: %s%s%s",
+
+    # Unclassified note if >80%
+    unclass_note <- ""
+    if (!is.null(unclassified_fractions)) {
+      pct <- unclassified_fractions[[v$visit_id]]
+      if (!is.null(pct) && pct > 80) {
+        unclass_note <- sprintf(" | UNCLASSIFIED: %.0f%%", pct)
+      }
+    }
+
+    sprintf("  %s (%s, %s): %d taxa, %.0f counts/L, %.4f mm3/L biovol, %.2f ug/L carbon | Top: %s%s%s%s%s",
             v$STATION_NAME_SHORT, region, v$visit_date,
             n_taxa, total_counts, total_bv, total_carbon,
             paste(top_names, collapse = ", "),
-            hab_note, chl_note)
+            hab_note, warn_note, chl_note, unclass_note)
   }, character(1))
 
-  paste(station_lines, collapse = "\n")
+  # Add a cruise-level warning summary block so the LLM sees all exceedances
+  # prominently regardless of where they appear in the per-station lines.
+  all_warnings <- character(0)
+  if (length(warning_thresholds) > 0) {
+    station_summary$display_name_tmp <- make_display(station_summary)
+    for (dn in names(warning_thresholds)) {
+      thresh <- warning_thresholds[[dn]]
+      idx <- which(station_summary$display_name_tmp == dn)
+      if (length(idx) == 0) next
+      for (ii in idx) {
+        counts <- station_summary$counts_per_liter[ii]
+        if (!is.na(counts) && !is.na(thresh) && counts >= thresh) {
+          stn <- station_summary$STATION_NAME_SHORT[ii]
+          all_warnings <- c(all_warnings,
+            sprintf("%s at %s (%.0f cells/L, threshold %.0f cells/L)",
+                    dn, stn, counts, thresh))
+        }
+      }
+    }
+    station_summary$display_name_tmp <- NULL
+  }
+
+  warning_block <- ""
+  if (length(all_warnings) > 0) {
+    warning_block <- paste0(
+      "\nIMPORTANT -- Taxa exceeding recommended warning levels during this cruise:\n",
+      paste0("  ", unique(all_warnings), collapse = "\n"),
+      "\nYou MUST explicitly mention each of these in the summary text, ",
+      "stating that the abundance exceeds the recommended warning level."
+    )
+  }
+
+  paste0(paste(station_lines, collapse = "\n"), warning_block)
 }
 
 #' Call the OpenAI API
@@ -357,6 +593,10 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
 call_openai <- function(system_prompt, user_prompt,
                         model = llm_model_name("openai"),
                         temperature = 0.3) {
+  if (!requireNamespace("httr2", quietly = TRUE)) {
+    stop("Package 'httr2' is required for LLM API calls. ",
+         "Install it with: install.packages(\"httr2\")", call. = FALSE)
+  }
   api_key <- Sys.getenv("OPENAI_API_KEY", "")
   if (!nzchar(api_key)) {
     stop("OPENAI_API_KEY environment variable is not set.", call. = FALSE)
@@ -404,6 +644,10 @@ call_openai <- function(system_prompt, user_prompt,
 call_gemini <- function(system_prompt, user_prompt,
                         model = llm_model_name("gemini"),
                         temperature = 0.3) {
+  if (!requireNamespace("httr2", quietly = TRUE)) {
+    stop("Package 'httr2' is required for LLM API calls. ",
+         "Install it with: install.packages(\"httr2\")", call. = FALSE)
+  }
   api_key <- Sys.getenv("GEMINI_API_KEY", "")
   if (!nzchar(api_key)) {
     stop("GEMINI_API_KEY environment variable is not set.", call. = FALSE)
@@ -507,12 +751,15 @@ strip_markdown <- function(text) {
 #' @param cruise_info Cruise info string.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
+#' @param unclassified_fractions Optional per-sample fractions of unclassified detections supplied to the prompt.
 #' @return Character string with Swedish summary.
 #' @export
 generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "", provider = NULL) {
+                                     cruise_info = "", provider = NULL,
+                                     unclassified_fractions = NULL) {
   guide <- load_writing_guide()
-  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup)
+  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup,
+                                                   unclassified_fractions = unclassified_fractions)
 
   system_prompt <- paste0(
     "You are a marine biologist writing phytoplankton monitoring reports ",
@@ -541,6 +788,10 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
     "'kryptomonader' (not 'kryptofyter'). ",
     "Compare klorofyllfluorescens between stations and relate it to the ",
     "IFCB biovolume data where relevant. ",
+    "If any station data lines contain 'WARNING EXCEEDED', you MUST explicitly ",
+    "state in the summary that the abundance of the named taxon exceeds the ",
+    "recommended warning level (varningsniv\u00e5) at that station, and include ",
+    "the actual abundance in cells/L and the threshold value. ",
     "Output ONLY the summary text, no headings. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
     "The only asterisk allowed is the harmful taxon marker directly after a species name."
@@ -556,12 +807,16 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param cruise_info Cruise info string.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
+#' @param unclassified_fractions Optional per-sample unclassified percentages
+#'   for contextualizing the summary.
 #' @return Character string with English summary.
 #' @export
 generate_english_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "", provider = NULL) {
+                                     cruise_info = "", provider = NULL,
+                                     unclassified_fractions = NULL) {
   guide <- load_writing_guide()
-  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup)
+  cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup,
+                                                   unclassified_fractions = unclassified_fractions)
 
   system_prompt <- paste0(
     "You are a marine biologist writing phytoplankton monitoring reports ",
@@ -576,6 +831,10 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
     "Station data overview:\n", cruise_data, "\n\n",
     "Write in English. Follow the writing guide exactly, including the ",
     "harmful taxa terminology section. ",
+    "If any station data lines contain 'WARNING EXCEEDED', you MUST explicitly ",
+    "state in the summary that the abundance of the named taxon exceeds the ",
+    "recommended warning level at that station, and include the actual abundance ",
+    "in cells/L and the threshold value. ",
     "Output ONLY the summary text, no headings or extra commentary. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
     "The only asterisk allowed is the harmful taxon marker directly after a species name."
@@ -591,13 +850,16 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param all_stations_summary Optional full station_summary for context.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
+#' @param unclassified_pct Optional per-class unclassified percentage info used for context.
 #' @return Character string with station description in English.
 #' @export
 generate_station_description <- function(station_data, taxa_lookup = NULL,
                                          all_stations_summary = NULL,
-                                         provider = NULL) {
+                                         provider = NULL,
+                                         unclassified_pct = NULL) {
   guide <- load_writing_guide()
-  station_text <- format_station_data_for_prompt(station_data, taxa_lookup)
+  station_text <- format_station_data_for_prompt(station_data, taxa_lookup,
+                                                  unclassified_pct = unclassified_pct)
 
   # Provide cruise-wide context so the LLM can make relative statements
   context <- ""
@@ -640,6 +902,10 @@ generate_station_description <- function(station_data, taxa_lookup = NULL,
     "(high/moderate/low) on the cruise context data above -- describe this station ",
     "relative to the other stations visited during this cruise. ",
     "Taxa marked [HAB] in the data are potentially harmful and must be mentioned. ",
+    "If the station data contains an IMPORTANT section about taxa exceeding warning ",
+    "levels, you MUST state in the description the actual abundance in cells/L and ",
+    "the threshold value (e.g. '2 000 cells/L, exceeding the warning level of ",
+    "1 500 cells/L'). ",
     "Output ONLY the description text, no headings or station name. ",
     "Output plain text only -- no markdown formatting whatsoever. ",
     "The only asterisk allowed is the harmful taxon marker directly after a species name."

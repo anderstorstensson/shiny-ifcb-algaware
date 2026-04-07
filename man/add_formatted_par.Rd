@@ -20,6 +20,8 @@ The modified \code{rdocx} object.
 }
 \description{
 Wrapper around \code{officer::body_add_fpar} that applies species name
-formatting when taxa_lookup is provided.
+formatting when taxa_lookup is provided. An empty paragraph is inserted
+between consecutive paragraphs so that multi-region summaries (Baltic /
+West Coast) are visually separated in the Word document.
 }
 \keyword{internal}

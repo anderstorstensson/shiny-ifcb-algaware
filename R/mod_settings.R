@@ -12,6 +12,59 @@ mod_settings_ui <- function(id) {
   )
 }
 
+#' Validate settings form inputs
+#'
+#' @param url Dashboard URL string.
+#' @param ppm Pixels-per-micron numeric value.
+#' @param n_taxa Number of mosaic taxa.
+#' @param n_imgs Number of mosaic images.
+#' @return Character error message or \code{NULL} if all valid.
+#' @keywords internal
+validate_settings_inputs <- function(url, ppm, n_taxa, n_imgs) {
+  if (nzchar(url) && !grepl("^https?://", url)) {
+    return("Dashboard URL must start with http:// or https://")
+  }
+  if (is.na(ppm) || ppm <= 0) {
+    return("Pixels per micron must be a positive number")
+  }
+  if (is.na(n_taxa) || n_taxa < 1) {
+    return("Number of mosaic taxa must be at least 1")
+  }
+  if (is.na(n_imgs) || n_imgs < 1) {
+    return("Images per mosaic must be at least 1")
+  }
+  NULL
+}
+
+#' Normalize a file path setting
+#'
+#' Converts backslashes to forward slashes so that Windows paths pasted from
+#' File Explorer work correctly regardless of platform.
+#'
+#' @param p Character path.
+#' @return Normalized path with forward slashes, or \code{p} unchanged if empty.
+#' @keywords internal
+normalize_settings_path <- function(p) {
+  if (!nzchar(p)) return(p)
+  p <- gsub("\\\\", "/", trimws(p))
+  tryCatch(
+    normalizePath(p, winslash = "/", mustWork = FALSE),
+    error = function(e) p
+  )
+}
+
+#' Check if a station name is already in the extra stations list
+#'
+#' @param station_name Character station name.
+#' @param existing_stations List of station entries, each with a
+#'   \code{STATION_NAME} field.
+#' @return Logical.
+#' @keywords internal
+is_station_duplicate <- function(station_name, existing_stations) {
+  existing_names <- vapply(existing_stations, function(s) s$STATION_NAME, "")
+  station_name %in% existing_names
+}
+
 #' Settings Module Server
 #'
 #' @param id Module namespace ID.
@@ -74,7 +127,10 @@ mod_settings_server <- function(id, config) {
             shiny::numericInput(ns("n_mosaic_images"),
                                 "Images per mosaic",
                                 value = config$n_mosaic_images,
-                                min = 4, max = 100)
+                                min = 4, max = 100),
+            shiny::checkboxInput(ns("include_class_mosaics"),
+                                 "Include per-class mosaics in report",
+                                 value = isTRUE(config$include_class_mosaics))
           ),
           shiny::column(6,
             shiny::h5("Storage & Classes"),
@@ -112,52 +168,30 @@ mod_settings_server <- function(id, config) {
     })
 
     shiny::observeEvent(input$save_settings, {
-      # Validate URL
-      url <- input$dashboard_url
-      if (nzchar(url) && !grepl("^https?://", url)) {
-        shiny::showNotification(
-          "Dashboard URL must start with http:// or https://",
-          type = "error")
-        return()
-      }
-
-      # Validate numeric inputs
-      ppm <- input$pixels_per_micron
-      if (is.na(ppm) || ppm <= 0) {
-        shiny::showNotification(
-          "Pixels per micron must be a positive number", type = "error")
-        return()
-      }
+      url    <- input$dashboard_url
+      ppm    <- input$pixels_per_micron
       n_taxa <- input$n_mosaic_taxa
-      if (is.na(n_taxa) || n_taxa < 1) {
-        shiny::showNotification(
-          "Number of mosaic taxa must be at least 1", type = "error")
-        return()
-      }
       n_imgs <- input$n_mosaic_images
-      if (is.na(n_imgs) || n_imgs < 1) {
-        shiny::showNotification(
-          "Images per mosaic must be at least 1", type = "error")
-        return()
-      }
 
-      # Normalize file paths
-      normalize_path <- function(p) {
-        if (nzchar(p)) normalizePath(p, mustWork = FALSE) else p
+      err <- validate_settings_inputs(url, ppm, n_taxa, n_imgs)
+      if (!is.null(err)) {
+        shiny::showNotification(err, type = "error")
+        return()
       }
 
       config$dashboard_url <- url
       config$dashboard_dataset <- input$dashboard_dataset
-      config$classification_path <- normalize_path(input$classification_path)
-      config$raw_data_path <- normalize_path(input$raw_data_path)
-      config$ferrybox_path <- normalize_path(input$ferrybox_path)
-      config$local_storage_path <- normalize_path(input$local_storage_path)
-      config$db_folder <- normalize_path(input$db_folder)
+      config$classification_path <- normalize_settings_path(input$classification_path)
+      config$raw_data_path <- normalize_settings_path(input$raw_data_path)
+      config$ferrybox_path <- normalize_settings_path(input$ferrybox_path)
+      config$local_storage_path <- normalize_settings_path(input$local_storage_path)
+      config$db_folder <- normalize_settings_path(input$db_folder)
       config$non_biological_classes <- input$non_biological_classes
       config$annotator <- input$annotator
       config$pixels_per_micron <- ppm
       config$n_mosaic_taxa <- n_taxa
       config$n_mosaic_images <- n_imgs
+      config$include_class_mosaics <- isTRUE(input$include_class_mosaics)
 
       save_settings(shiny::reactiveValuesToList(config))
       shiny::removeModal()
@@ -180,8 +214,7 @@ mod_settings_server <- function(id, config) {
 
       # Check not already added
       existing <- config$extra_stations
-      existing_names <- vapply(existing, function(s) s$STATION_NAME, "")
-      if (station_name %in% existing_names) {
+      if (is_station_duplicate(station_name, existing)) {
         shiny::showNotification("Station already added", type = "warning")
         return()
       }

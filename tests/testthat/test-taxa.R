@@ -28,23 +28,30 @@ test_that("build_relabel_choices groups DB, taxa, and custom classes", {
   expect_equal(result$grouped[["Taxa lookup"]], c("ClassC", "ClassD"))
   # Custom group excludes classes in DB or taxa
   expect_equal(result$grouped[["Custom classes"]], "ClassE")
-  # All classes combined
-  expect_equal(result$all, c("ClassA", "ClassB", "ClassC", "ClassD", "ClassE"))
+  # Other group includes unclassified
+  expect_true("Other" %in% names(result$grouped))
+  expect_equal(result$grouped[["Other"]], "unclassified")
+  # All classes combined (including unclassified)
+  expect_equal(result$all,
+               c("ClassA", "ClassB", "ClassC", "ClassD", "ClassE", "unclassified"))
 })
 
 test_that("build_relabel_choices handles empty inputs", {
   result <- build_relabel_choices()
-  expect_equal(length(result$grouped), 0)
-  expect_equal(length(result$all), 0)
+  # Still has the "Other" group with unclassified
+  expect_equal(length(result$grouped), 1)
+  expect_equal(result$grouped[["Other"]], "unclassified")
+  expect_equal(result$all, "unclassified")
 })
 
-test_that("build_relabel_choices omits empty groups", {
+test_that("build_relabel_choices omits empty groups except Other", {
   db <- c("ClassA")
   result <- build_relabel_choices(db, NULL, NULL)
 
   expect_true("Database classes" %in% names(result$grouped))
   expect_false("Taxa lookup" %in% names(result$grouped))
   expect_false("Custom classes" %in% names(result$grouped))
+  expect_true("Other" %in% names(result$grouped))
 })
 
 test_that("build_relabel_choices deduplicates across sources", {
@@ -54,9 +61,9 @@ test_that("build_relabel_choices deduplicates across sources", {
 
   result <- build_relabel_choices(db, taxa, custom)
 
-  # Shared only appears in DB group
-  expect_equal(result$all, "Shared")
-  expect_equal(length(result$grouped), 1)
+  # Shared only appears in DB group, plus Other
+  expect_equal(result$all, c("Shared", "unclassified"))
+  expect_equal(length(result$grouped), 2)
 })
 
 # -- merge_custom_taxa -----------------------------------------------------
@@ -107,6 +114,70 @@ test_that("merge_custom_taxa does not duplicate existing classes", {
   result <- merge_custom_taxa(taxa, custom)
   expect_equal(nrow(result), 1)
   expect_equal(result$name, "A")
+})
+
+test_that("format_taxon_labels italicizes and appends sflag", {
+  taxa <- data.frame(
+    name = "Pseudo-nitzschia seriata",
+    sflag = "cf.",
+    italic = TRUE,
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_taxon_labels("Pseudo-nitzschia seriata cf.", taxa)
+  expect_match(result[["Pseudo-nitzschia seriata cf."]], "<i>")
+  expect_match(result[["Pseudo-nitzschia seriata cf."]], "cf\\.")
+})
+
+test_that("format_taxon_labels returns plain when format='plain'", {
+  taxa <- data.frame(
+    name = "Skeletonema marinoi",
+    sflag = "",
+    italic = TRUE,
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_taxon_labels("Skeletonema marinoi", taxa,
+                                            format = "plain")
+  expect_equal(result[["Skeletonema marinoi"]], "Skeletonema marinoi")
+})
+
+# -- enrich_corrections_for_export -------------------------------------------
+
+test_that("enrich_corrections_for_export adds custom metadata when matched", {
+  corrections <- data.frame(
+    new_class = c("MyAlga", "unclassified"),
+    stringsAsFactors = FALSE
+  )
+  custom_classes <- data.frame(
+    clean_names = "MyAlga",
+    name = "My alga sp.",
+    sflag = "",
+    AphiaID = 999L,
+    HAB = FALSE,
+    italic = TRUE,
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::enrich_corrections_for_export(corrections, custom_classes)
+  expect_equal(result$custom_sci_name[result$new_class == "MyAlga"], "My alga sp.")
+  expect_equal(result$custom_aphia_id[result$new_class == "MyAlga"], 999L)
+  expect_true(is.na(result$custom_sci_name[result$new_class == "unclassified"]))
+})
+
+test_that("enrich_corrections_for_export returns unchanged when no custom_classes", {
+  corrections <- data.frame(new_class = "SomeTaxon", stringsAsFactors = FALSE)
+  result <- algaware:::enrich_corrections_for_export(corrections, NULL)
+  expect_true("custom_sci_name" %in% names(result))
+  expect_true(is.na(result$custom_sci_name))
+})
+
+test_that("enrich_corrections_for_export returns unchanged when no matches", {
+  corrections <- data.frame(new_class = "SomeTaxon", stringsAsFactors = FALSE)
+  custom_classes <- data.frame(
+    clean_names = "OtherTaxon", name = "Other taxon",
+    sflag = "", AphiaID = 1L, HAB = FALSE, italic = TRUE,
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::enrich_corrections_for_export(corrections, custom_classes)
+  expect_true(is.na(result$custom_sci_name))
 })
 
 test_that("merge_custom_taxa returns taxa_lookup unchanged with no custom", {

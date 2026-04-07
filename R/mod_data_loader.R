@@ -41,6 +41,16 @@ mod_data_loader_ui <- function(id) {
 }
 
 #' Filter and match metadata to stations
+#'
+#' Filters the full dashboard metadata by cruise number or date range and
+#' spatially matches the resulting bins to AlgAware monitoring stations.
+#'
+#' @param dashboard_metadata Data frame from \code{fetch_dashboard_metadata()}.
+#' @param selection_mode Character; \code{"cruise"} or \code{"date"}.
+#' @param cruise Cruise number string (used when \code{selection_mode = "cruise"}).
+#' @param date_range Length-2 Date vector (used when \code{selection_mode = "date"}).
+#' @param extra_stations List of extra station definitions (from settings).
+#' @return A list with \code{matched} (data frame) and \code{cruise_info} (string).
 #' @keywords internal
 filter_and_match <- function(dashboard_metadata, selection_mode, cruise,
                              date_range, extra_stations) {
@@ -65,6 +75,17 @@ filter_and_match <- function(dashboard_metadata, selection_mode, cruise,
 }
 
 #' Download raw data, features, and classification files
+#'
+#' Downloads .roi/.adc/.hdr raw files and feature CSVs from the IFCB Dashboard,
+#' then copies AI classification H5 files from the configured source path.
+#' All three destinations are subdirectories of \code{storage}:
+#' \code{raw/}, \code{features/}, and \code{classified/}.
+#'
+#' @param config Reactive values with settings (\code{dashboard_url},
+#'   \code{dashboard_dataset}, \code{classification_path}).
+#' @param sample_ids Character vector of sample PIDs to retrieve.
+#' @param storage Local base directory for downloaded files.
+#' @return A list with \code{raw_dir}, \code{feat_dir}, \code{class_dir} paths.
 #' @keywords internal
 download_all_data <- function(config, sample_ids, storage) {
   raw_dir <- file.path(storage, "raw")
@@ -89,6 +110,18 @@ download_all_data <- function(config, sample_ids, storage) {
 }
 
 #' Process classifications and compute station summaries
+#'
+#' Reads H5 classification files, computes biovolume data for each classified
+#' image, aggregates results by station visit, and extracts the classifier name
+#' from the first H5 file. Non-biological classes are excluded from biovolume
+#' but kept in the classification data frame for gallery display.
+#'
+#' @param config Reactive values with settings (\code{non_biological_classes},
+#'   \code{pixels_per_micron}).
+#' @param dirs List with \code{raw_dir}, \code{feat_dir}, \code{class_dir} paths.
+#' @param sample_ids Character vector of sample PIDs to process.
+#' @param matched Data frame of station-matched metadata.
+#' @return A named list, or NULL if no H5 classifications were found.
 #' @keywords internal
 process_classifications <- function(config, dirs, sample_ids, matched) {
   classifications <- read_h5_classifications(dirs$class_dir, sample_ids)
@@ -122,9 +155,26 @@ process_classifications <- function(config, dirs, sample_ids, matched) {
 }
 
 #' Collect and merge ferrybox chlorophyll data
+#'
+#' Fetches ferrybox data for the cruise sample timestamps, extracts
+#' chlorophyll fluorescence (parameter 8063, QC-approved values only),
+#' and computes a per-station mean that is merged into \code{station_summary}.
+#' Returns an empty data frame (no error) when the ferrybox path is not
+#' configured or no matching data is found.
+#'
+#' @param config Reactive values with settings (\code{ferrybox_path}).
+#' @param matched Station-matched metadata with \code{sample_time} column.
+#' @param station_summary Aggregated station data to receive \code{chl_mean}.
+#' @return A list with \code{station_summary}, \code{chl_summary}, and
+#'   \code{ferrybox_data} fields.
 #' @keywords internal
 merge_ferrybox_data <- function(config, matched, station_summary) {
   chl_summary <- NULL
+  fb_data <- data.frame(
+    timestamp = matched$sample_time[0],
+    chl = numeric(0),
+    stringsAsFactors = FALSE
+  )
 
   if (nzchar(config$ferrybox_path)) {
     fb_data <- collect_ferrybox_data(
@@ -153,10 +203,26 @@ merge_ferrybox_data <- function(config, matched, station_summary) {
     }
   }
 
-  list(station_summary = station_summary, chl_summary = chl_summary)
+  list(
+    station_summary = station_summary,
+    chl_summary = chl_summary,
+    ferrybox_data = fb_data
+  )
 }
 
 #' Resolve the class list from database or auto-generate
+#'
+#' Tries to load the global class list from the configured SQLite database
+#' (shared with ClassiPyR). If no database is configured or it has no class
+#' list, auto-generates one from the union of all taxa lookup names and
+#' observed classification class names. The caller receives a flag indicating
+#' which path was taken so it can show a notification.
+#'
+#' @param config Reactive values with settings (\code{db_folder}).
+#' @param taxa_lookup Data frame with \code{clean_names} column.
+#' @param classifications Data frame with \code{class_name} column.
+#' @return A list with \code{class_list} (character vector) and
+#'   \code{auto_generated} (logical).
 #' @keywords internal
 resolve_classes <- function(config, taxa_lookup, classifications) {
   resolved_classes <- NULL
@@ -199,6 +265,12 @@ build_cruise_info <- function(sample_times) {
 }
 
 #' Sanitize error message for user display
+#'
+#' Strips the leading "Error in <call>: " prefix that R prepends to condition
+#' messages so that only the human-readable part is shown in the sidebar.
+#'
+#' @param msg Character string (typically \code{e$message}).
+#' @return Simplified character string.
 #' @keywords internal
 sanitize_error_msg <- function(msg) {
   sub("^.*: ", "", msg)
@@ -313,17 +385,100 @@ mod_data_loader_server <- function(id, config, rv) {
           proc <- process_classifications(config, dirs, sample_ids, matched)
 
           if (is.null(proc)) {
-            status("No classifications found. Check classification path.")
-            shiny::showNotification("No classifications found",
-                                    type = "warning")
+            resolved_class_path <- resolve_classification_path(
+              config$classification_path
+            )
+            local_n <- length(list.files(
+              dirs$class_dir, pattern = "_class.*\\.h5$",
+              recursive = TRUE
+            ))
+            local_files <- list.files(
+              dirs$class_dir, pattern = "_class.*\\.h5$",
+              recursive = TRUE, full.names = FALSE
+            )
+            local_samples <- unique(sub("_class.*\\.h5$", "", basename(local_files)))
+            requested_samples <- unique(sample_ids)
+            matched_local <- intersect(requested_samples, local_samples)
+            missing_local <- setdiff(requested_samples, local_samples)
+
+            source_year_dirs <- if (nzchar(resolved_class_path) &&
+                                    dir.exists(resolved_class_path)) {
+              roots <- list.dirs(resolved_class_path,
+                                 recursive = FALSE,
+                                 full.names = FALSE)
+              sum(grepl("^class\\d{4}(_|$)", roots, ignore.case = TRUE))
+            } else {
+              NA_integer_
+            }
+
+            sample_example <- if (length(requested_samples) > 0) {
+              requested_samples[[1]]
+            } else {
+              ""
+            }
+            missing_example <- if (length(missing_local) > 0) {
+              missing_local[[1]]
+            } else {
+              ""
+            }
+            example_source_candidate <- if (nzchar(missing_example)) {
+              year <- substr(missing_example, 2, 5)
+              file.path(
+                resolved_class_path,
+                paste0("class", year, "_v3"),
+                paste0(missing_example, "_class.h5")
+              )
+            } else {
+              ""
+            }
+            msg <- paste0(
+              "No classifications found.\n",
+              "Source path: ", config$classification_path, "\n",
+              "Resolved source path: ", resolved_class_path, "\n",
+              "Source year folders (classYYYY*): ",
+              if (is.na(source_year_dirs)) "path missing/unreadable" else source_year_dirs, "\n",
+              "Local copied *_class*.h5 files: ", local_n, "\n",
+              "Requested sample IDs: ", length(requested_samples), "\n",
+              "Requested IDs found locally: ", length(matched_local), "\n",
+              if (nzchar(sample_example)) {
+                paste0("Example expected sample ID: ", sample_example, "\n")
+              } else {
+                ""
+              },
+              if (nzchar(missing_example)) {
+                paste0("Example requested ID missing locally: ", missing_example, "\n")
+              } else {
+                ""
+              },
+              if (nzchar(example_source_candidate)) {
+                paste0("Example expected source file: ", example_source_candidate, "\n")
+              } else {
+                ""
+              },
+              "Check that file basenames match sample IDs from metadata ",
+              "(e.g. DYYYYMMDDTHHMMSS_IFCB###_class.h5)."
+            )
+            status(msg)
+            shiny::showNotification(
+              "No classifications found (see sidebar status for details)",
+              type = "warning", duration = 10
+            )
             return()
           }
 
+          rv$matched_metadata_all <- matched
+          rv$matched_metadata <- matched
+          rv$classifications_raw_all <- proc$classifications_raw
           rv$classifications_raw <- proc$classifications_raw
-          rv$classifications <- proc$classifications
-          rv$invalidated_classes <- proc$non_bio_classes
+          rv$classifications_all      <- proc$classifications
+          rv$classifications          <- proc$classifications
+          rv$classifications_original <- proc$classifications
+          rv$invalidated_classes      <- proc$non_bio_classes
           rv$taxa_lookup <- proc$taxa_lookup
           rv$classifier_name <- proc$classifier_name
+          rv$excluded_samples <- character(0)
+          rv$frontpage_baltic_mosaic <- NULL
+          rv$frontpage_westcoast_mosaic <- NULL
 
           # Build descriptive cruise info from sample dates
           rv$cruise_info <- build_cruise_info(matched$sample_time)
@@ -331,16 +486,18 @@ mod_data_loader_server <- function(id, config, rv) {
           # Step 4a: Fetch cruise-wide image counts
           shiny::incProgress(0.05, detail = "Fetching image counts...")
           sample_dates <- as.Date(matched$sample_time)
-          rv$image_counts <- fetch_image_counts(
+          rv$image_counts_all <- fetch_image_counts(
             config$dashboard_url, config$dashboard_dataset,
             min(sample_dates), max(sample_dates)
           )
+          rv$image_counts <- rv$image_counts_all
 
           # Step 4b: Ferrybox data
           shiny::incProgress(0.05, detail = "Collecting ferrybox data...")
           fb_result <- merge_ferrybox_data(config, matched,
                                            proc$station_summary)
           rv$station_summary <- fb_result$station_summary
+          rv$ferrybox_data <- fb_result$ferrybox_data
           rv$ferrybox_chl <- fb_result$chl_summary
 
           # Step 5: Create summaries
@@ -372,22 +529,7 @@ mod_data_loader_server <- function(id, config, rv) {
             rv$class_list, rv$taxa_lookup, rv$custom_classes
           )
 
-          # Warn about unmatched classes
-          observed_classes <- unique(rv$classifications$class_name)
-          unmatched <- setdiff(observed_classes, rv$class_list)
-          if (length(unmatched) > 0) {
-            shiny::showNotification(
-              paste0(length(unmatched), " class(es) in classifications not ",
-                     "in class list: ",
-                     paste(utils::head(unmatched, 5), collapse = ", "),
-                     if (length(unmatched) > 5) "..."),
-              type = "warning", duration = 10
-            )
-          }
-
-          # Gallery classes
           gallery_classes <- sort(unique(rv$classifications$class_name))
-          gallery_classes <- gallery_classes[gallery_classes != "unclassified"]
           rv$current_class_idx <- 1L
           rv$current_region <- "EAST"
           rv$data_loaded <- TRUE

@@ -1,4 +1,4 @@
-url: https://anderstorstensson.github.io/shiny-ifcb-algaware/
+url: https://nodc-sweden.github.io/ifcb-algaware/
 
 template:
   bootstrap: 5
@@ -43,13 +43,36 @@ template:
 
 navbar:
   structure:
-    left: [intro, reference, articles]
+    left: [intro, reference, articles, news]
     right: [search, lightswitch, github]
   components:
+    reference:
+      text: Functions
+      href: reference/index.html
     github:
       icon: fa-github
       aria-label: GitHub
-      href: https://github.com/anderstorstensson/shiny-ifcb-algaware/
+      href: https://github.com/nodc-sweden/ifcb-algaware/
+    articles:
+      text: User Guides
+      menu:
+        - text: Getting Started
+          href: articles/installation.html
+        - text: Standard AlgAware Workflow
+          href: articles/workflow.html
+        - text: Customising the Report
+          href: articles/report-customisation.html
+        - text: Uploading Metadata to the IFCB Dashboard
+          href: articles/ifcb-dashboard-metadata.html
+
+articles:
+  - title: Guides
+    navbar: ~
+    contents:
+      - installation
+      - workflow
+      - report-customisation
+      - ifcb-dashboard-metadata
 
 reference:
   - title: Launch Application
@@ -72,6 +95,8 @@ reference:
       - aggregate_station_data
       - summarize_biovolumes
       - create_wide_summary
+      - parse_non_bio_classes
+      - compute_unclassified_fractions
       - match_bins_to_stations
       - collect_ferrybox_data
 
@@ -83,10 +108,26 @@ reference:
       - resolve_class_list
       - copy_classification_files
 
+  - title: CTD & Chlorophyll Data
+    desc: Parse CTD profiles and LIMS chlorophyll data for the chlorophyll map
+    contents:
+      - load_chl_statistics
+      - load_station_mapper
+      - load_standard_stations
+      - read_cnv_folder
+      - read_cnv_folder_all
+      - read_lims_data
+      - read_lims_data_all
+      - compute_ctd_chl_avg
+      - compute_lims_chl_avg
+      - compute_lims_hose_avg
+
   - title: Visualization
     desc: Create plots and maps
     contents:
       - create_biomass_maps
+      - create_chl_map
+      - create_ctd_region_figure
       - create_heatmap
       - create_stacked_bar
       - create_image_count_map
@@ -95,6 +136,7 @@ reference:
     desc: Generate Word reports
     contents:
       - generate_report
+      - generate_frontpage_mosaic
       - generate_english_summary
       - generate_swedish_summary
       - generate_station_description
@@ -115,11 +157,13 @@ reference:
     contents:
       - create_mosaic
       - create_region_mosaics
+      - get_top_taxa
+      - get_taxon_rois
+      - extract_random_taxon_image
 
   - title: LLM Support
     desc: AI-powered report text generation
     contents:
-      - llm
       - llm_available
       - llm_provider
       - llm_providers
@@ -135,3 +179,4 @@ reference:
     contents:
       - load_settings
       - save_settings
+      - merge_custom_taxa

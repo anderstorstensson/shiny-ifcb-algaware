@@ -19,6 +19,43 @@ validate_sample_ids <- function(sample_ids) {
   invisible(TRUE)
 }
 
+#' Resolve classification source path across OS conventions
+#'
+#' Converts backslashes to forward slashes and, on non-Windows systems,
+#' attempts to map Windows drive-letter paths (e.g. \code{Z:/...}) to
+#' \code{/mnt/z/...} when that mount exists.
+#'
+#' @param path Character path as configured by the user.
+#' @return A normalized path candidate.
+#' @keywords internal
+resolve_classification_path <- function(path) {
+  if (!nzchar(path)) return(path)
+  p <- trimws(path)
+  p <- gsub("\\\\", "/", p)
+  p <- sub("/+$", "", p)
+
+  p_norm <- tryCatch(
+    normalizePath(p, winslash = "/", mustWork = FALSE),
+    error = function(e) p
+  )
+  p_norm <- gsub("\\\\", "/", p_norm)
+  p_norm <- sub("/+$", "", p_norm)
+
+  if (dir.exists(p_norm)) return(p_norm)
+  if (dir.exists(p)) return(p)
+
+  # WSL/non-Windows convenience: "Z:/foo" -> "/mnt/z/foo"
+  if (.Platform$OS.type != "windows" && grepl("^[A-Za-z]:/", p)) {
+    drive <- tolower(substr(p, 1, 1))
+    rest <- substr(p, 4, nchar(p))
+    mapped <- file.path("/mnt", drive, rest)
+    mapped <- gsub("//+", "/", mapped)
+    if (dir.exists(mapped)) return(mapped)
+  }
+
+  p
+}
+
 #' Fetch metadata from the IFCB Dashboard
 #'
 #' Wraps \code{iRfcb::ifcb_download_dashboard_metadata()} and extracts
@@ -85,6 +122,10 @@ filter_metadata <- function(metadata, cruise = NULL, date_from = NULL, date_to =
 #' @export
 fetch_image_counts <- function(dashboard_url, dataset_name,
                                start_date, end_date) {
+  if (!requireNamespace("httr2", quietly = TRUE)) {
+    stop("Package 'httr2' is required to fetch image counts. ",
+         "Install it with: install.packages(\"httr2\")", call. = FALSE)
+  }
   base_url <- paste0(
     sub("/$", "", dashboard_url),
     "/api/export_metadata/",
@@ -245,6 +286,7 @@ copy_classification_files <- function(classification_path, sample_ids,
                                       dest_dir, progress_callback = NULL) {
   validate_sample_ids(sample_ids)
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+  classification_path <- resolve_classification_path(classification_path)
 
   # Skip samples already copied locally
   existing_h5 <- list.files(dest_dir, pattern = "\\.h5$")
@@ -261,11 +303,9 @@ copy_classification_files <- function(classification_path, sample_ids,
 
   # Extract year from sample ID (format: D20221023T...)
   sample_years <- substr(needed, 2, 5)
-
-  # Find yearly subfolders once (quick: only top-level dirs)
-  subdirs <- list.dirs(classification_path, recursive = FALSE,
-                       full.names = TRUE)
-  subdir_names <- basename(subdirs)
+  root_name <- basename(normalizePath(classification_path, winslash = "/",
+                                      mustWork = FALSE))
+  root_is_year_dir <- grepl("^class\\d{4}(_|$)", root_name, ignore.case = TRUE)
 
   if (!is.null(progress_callback)) {
     progress_callback(0, length(needed),
@@ -279,9 +319,19 @@ copy_classification_files <- function(classification_path, sample_ids,
     h5_name <- paste0(sid, "_class.h5")
     dest <- file.path(dest_dir, h5_name)
 
-    # Find the yearly subfolder matching this sample's year
-    year_dirs <- subdirs[grepl(paste0("class", year), subdir_names)]
+    # Find yearly folder(s) matching this sample's year using direct top-level
+    # globbing instead of list.dirs(). This is typically more reliable on
+    # network drives and still avoids traversing large directory trees.
+    year_dirs <- Sys.glob(file.path(
+      classification_path,
+      paste0("[Cc][Ll][Aa][Ss][Ss]", year, "*")
+    ))
+    if (root_is_year_dir &&
+        grepl(paste0("^class", year, "(_|$)"), root_name, ignore.case = TRUE)) {
+      year_dirs <- unique(c(classification_path, year_dirs))
+    }
 
+    # Direct-path lookup only: exact expected file name in expected year dirs.
     src <- NULL
     for (yd in year_dirs) {
       candidate <- file.path(yd, h5_name)

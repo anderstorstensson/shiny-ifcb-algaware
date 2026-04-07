@@ -4,12 +4,17 @@
 \alias{format_station_data_for_prompt}
 \title{Format station data as a text summary for the LLM prompt}
 \usage{
-format_station_data_for_prompt(station_data, taxa_lookup = NULL)
+format_station_data_for_prompt(
+  station_data,
+  taxa_lookup = NULL,
+  unclassified_pct = NULL
+)
 }
 \arguments{
 \item{station_data}{Data frame with station_summary rows for one visit.}
 
-\item{taxa_lookup}{Optional taxa lookup with HAB column.}
+\item{taxa_lookup}{Optional taxa lookup with \code{HAB} and
+\code{warning_level} columns.}
 }
 \value{
 Character string describing the station data.

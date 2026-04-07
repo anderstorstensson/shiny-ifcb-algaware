@@ -6,7 +6,21 @@
 \usage{
 download_all_data(config, sample_ids, storage)
 }
+\arguments{
+\item{config}{Reactive values with settings (\code{dashboard_url},
+\code{dashboard_dataset}, \code{classification_path}).}
+
+\item{sample_ids}{Character vector of sample PIDs to retrieve.}
+
+\item{storage}{Local base directory for downloaded files.}
+}
+\value{
+A list with \code{raw_dir}, \code{feat_dir}, \code{class_dir} paths.
+}
 \description{
-Download raw data, features, and classification files
+Downloads .roi/.adc/.hdr raw files and feature CSVs from the IFCB Dashboard,
+then copies AI classification H5 files from the configured source path.
+All three destinations are subdirectories of \code{storage}:
+\code{raw/}, \code{features/}, and \code{classified/}.
 }
 \keyword{internal}
