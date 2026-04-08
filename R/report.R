@@ -1043,12 +1043,18 @@ add_front_page <- function(doc, cleanup,
 
     doc <- officer::body_add_fpar(doc, officer::fpar(
       officer::ftext(
-        "Phytoplankton group composition at AlgAware stations. Pie slice",
+        paste0(
+          "Phytoplankton group composition at AlgAware stations. ",
+          "Pie slices show relative group composition,"
+        ),
         officer::fp_text(font.size = 10, font.family = font)
       ),
       officer::run_linebreak(),
       officer::ftext(
-        "areas represent relative carbon biomass concentration; no absolute size legend is shown.",
+        paste0(
+          "and pie size shows relative total carbon biomass concentration ",
+          "among stations. No absolute size legend is shown."
+        ),
         officer::fp_text(font.size = 10, font.family = font)
       ),
       fp_p = center_pp
