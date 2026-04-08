@@ -66,6 +66,39 @@ test_that("format_station_data_for_prompt produces expected output", {
   expect_true(grepl("Skeletonema marinoi", result))
 })
 
+test_that("format_station_data_for_prompt uses detailed and collapsed group assignments", {
+  station_data <- data.frame(
+    STATION_NAME_SHORT = "BY31",
+    STATION_NAME = "BY31 Landsort Deep",
+    COAST = "EAST",
+    visit_date = as.Date("2024-03-15"),
+    name = c("Skeletonema marinoi", "Teleaulax amphioxeia", "Mesodinium rubrum"),
+    AphiaID = c(149142, 157183, 179320),
+    biovolume_mm3_per_liter = c(0.5, 0.2, 0.1),
+    carbon_ug_per_liter = c(10.0, 4.0, 2.0),
+    counts_per_liter = c(1000, 500, 200),
+    stringsAsFactors = FALSE
+  )
+  phyto_groups <- data.frame(
+    name = c("Skeletonema marinoi", "Teleaulax amphioxeia", "Mesodinium rubrum"),
+    AphiaID = c(149142, 157183, 179320),
+    phyto_group = c("Diatoms", "Cryptophytes", "Mesodinium spp."),
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_station_data_for_prompt(
+    station_data,
+    phyto_groups = phyto_groups
+  )
+  expect_true(grepl("Provided dominant-group assignments", result))
+  expect_true(grepl("Provided four-group assignments", result))
+  expect_true(grepl("Diatoms:", result))
+  expect_true(grepl("Cryptophytes:", result))
+  expect_true(grepl("Mesodinium spp\\.:", result))
+  expect_true(grepl("Other:", result))
+  expect_true(grepl("Teleaulax amphioxeia", result))
+  expect_true(grepl("Mesodinium rubrum", result))
+})
+
 test_that("ensure_hab_asterisks adds * after missing HAB taxa", {
   taxa <- data.frame(
     name = c("Dinophysis acuminata", "Pseudochattonella", "Aphanizomenon flos-aquae"),
@@ -193,6 +226,40 @@ test_that("format_cruise_summary_for_prompt produces text", {
   expect_type(result, "character")
   expect_true(grepl("BY5", result))
   expect_true(grepl("ANHOLT", result))
+})
+
+test_that("format_cruise_summary_for_prompt uses detailed and collapsed group assignments", {
+  station_summary <- data.frame(
+    STATION_NAME_SHORT = c("BY5", "BY5", "ANHOLT", "ANHOLT"),
+    COAST = c("EAST", "EAST", "WEST", "WEST"),
+    visit_date = as.Date(c("2024-03-15", "2024-03-15",
+                           "2024-03-16", "2024-03-16")),
+    visit_id = c("BY5_visit1", "BY5_visit1", "ANHOLT_visit1", "ANHOLT_visit1"),
+    name = c("Skeletonema marinoi", "Teleaulax amphioxeia",
+             "Karlodinium veneficum", "Mesodinium rubrum"),
+    AphiaID = c(149142, 157183, 110690, 179320),
+    biovolume_mm3_per_liter = c(0.5, 0.1, 0.3, 0.05),
+    carbon_ug_per_liter = c(10, 2, 6, 1),
+    counts_per_liter = c(1000, 200, 500, 100),
+    stringsAsFactors = FALSE
+  )
+  phyto_groups <- data.frame(
+    name = c("Skeletonema marinoi", "Teleaulax amphioxeia",
+             "Karlodinium veneficum", "Mesodinium rubrum"),
+    AphiaID = c(149142, 157183, 110690, 179320),
+    phyto_group = c("Diatoms", "Cryptophytes", "Dinoflagellates", "Mesodinium spp."),
+    stringsAsFactors = FALSE
+  )
+  result <- algaware:::format_cruise_summary_for_prompt(
+    station_summary,
+    phyto_groups = phyto_groups
+  )
+  expect_true(grepl("Dominant groups: Diatoms", result))
+  expect_true(grepl("Dominant groups: Dinoflagellates", result) || grepl("Dinoflagellates 0.300", result))
+  expect_true(grepl("Cryptophytes 0.100", result))
+  expect_true(grepl("Mesodinium spp\\. 0.050", result))
+  expect_true(grepl("Key-species groups: Diatoms", result))
+  expect_true(grepl("Other 0.100", result) || grepl("Other 0.050", result))
 })
 
 test_that("format_cruise_summary_for_prompt marks HAB species", {

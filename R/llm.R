@@ -271,15 +271,149 @@ load_writing_guide <- function() {
   paste(readLines(guide_path, warn = FALSE), collapse = "\n")
 }
 
+#' Normalize phytoplankton groups for report text
+#'
+#' Keeps the detailed plotting groups and also derives the collapsed
+#' four-group view used for the species-by-group prose.
+#'
+#' @param phyto_groups Data frame with columns \code{name}, \code{AphiaID},
+#'   and either \code{phyto_group} or \code{phyto_group.plankton_group}.
+#' @return Data frame with columns \code{name}, \code{AphiaID},
+#'   \code{detailed_group}, and \code{text_group}.
+#' @keywords internal
+normalize_phyto_groups_for_text <- function(phyto_groups) {
+  if (is.null(phyto_groups) || nrow(phyto_groups) == 0) {
+    return(NULL)
+  }
+
+  group_col <- if ("phyto_group" %in% names(phyto_groups)) {
+    "phyto_group"
+  } else if ("phyto_group.plankton_group" %in% names(phyto_groups)) {
+    "phyto_group.plankton_group"
+  } else {
+    return(NULL)
+  }
+
+  out <- phyto_groups[, intersect(c("name", "AphiaID"), names(phyto_groups)),
+                      drop = FALSE]
+  out$detailed_group <- as.character(phyto_groups[[group_col]])
+  out$detailed_group[is.na(out$detailed_group)] <- "Other"
+  out$text_group <- out$detailed_group
+  out$text_group <- ifelse(
+    out$text_group %in% c("Diatoms", "Dinoflagellates", "Cyanobacteria"),
+    out$text_group,
+    "Other"
+  )
+  unique(out)
+}
+
+#' Attach collapsed text groups to station summary data
+#'
+#' @param x Station-level data frame with \code{name} and optionally
+#'   \code{AphiaID}.
+#' @param phyto_groups Group assignment table passed through
+#'   \code{collapse_phyto_groups_for_text()}.
+#' @return \code{x} with an added \code{text_group} column.
+#' @keywords internal
+attach_text_groups <- function(x, phyto_groups = NULL) {
+  x$detailed_group <- "Other"
+  x$text_group <- "Other"
+  groups <- normalize_phyto_groups_for_text(phyto_groups)
+  if (is.null(groups) || nrow(groups) == 0) {
+    return(x)
+  }
+
+  by_cols <- intersect(c("name", "AphiaID"), names(x))
+  by_cols <- intersect(by_cols, names(groups))
+  if (length(by_cols) == 0) {
+    by_cols <- "name"
+  }
+
+  merged <- merge(
+    x,
+    groups,
+    by = by_cols,
+    all.x = TRUE,
+    suffixes = c("", ".group")
+  )
+  merged$detailed_group <- merged$detailed_group.group
+  merged$text_group <- merged$text_group.group
+  merged$detailed_group.group <- NULL
+  merged$text_group.group <- NULL
+  merged$detailed_group[is.na(merged$detailed_group)] <- "Other"
+  merged$text_group[is.na(merged$text_group)] <- "Other"
+
+  # Restore original row order after merge.
+  if (".row_id_tmp" %in% names(merged)) {
+    merged <- merged[order(merged$.row_id_tmp), , drop = FALSE]
+    merged$.row_id_tmp <- NULL
+  }
+  merged
+}
+
+#' Build a station-level group summary block for LLM prompts
+#'
+#' @param station_data Station summary rows for one visit, including
+#'   \code{detailed_group} or \code{text_group}.
+#' @param group_col Column name to summarize.
+#' @param heading Heading line for the block.
+#' @return Character string.
+#' @keywords internal
+build_station_group_summary <- function(station_data, group_col, heading) {
+  if (!group_col %in% names(station_data) || nrow(station_data) == 0) {
+    return("")
+  }
+
+  totals <- stats::aggregate(
+    biovolume_mm3_per_liter ~ group,
+    data = data.frame(
+      group = station_data[[group_col]],
+      biovolume_mm3_per_liter = station_data$biovolume_mm3_per_liter
+    ),
+    FUN = sum,
+    na.rm = TRUE
+  )
+  totals <- totals[totals$biovolume_mm3_per_liter > 0, , drop = FALSE]
+  if (nrow(totals) == 0) return("")
+  totals <- totals[order(-totals$biovolume_mm3_per_liter), , drop = FALSE]
+
+  total_bv <- sum(station_data$biovolume_mm3_per_liter, na.rm = TRUE)
+  group_lines <- vapply(seq_len(nrow(totals)), function(i) {
+    grp <- totals$group[i]
+    grp_data <- station_data[station_data[[group_col]] == grp, , drop = FALSE]
+    grp_data <- grp_data[order(-grp_data$biovolume_mm3_per_liter), , drop = FALSE]
+    top_names <- unique(grp_data$display_name)
+    top_names <- utils::head(top_names[nzchar(top_names)], 3)
+    pct <- if (total_bv > 0) {
+      sprintf("%.1f%%", 100 * totals$biovolume_mm3_per_liter[i] / total_bv)
+    } else {
+      "0%"
+    }
+    sprintf("  %s: %.3f mm3/L (%s of total); top taxa: %s",
+            grp, totals$biovolume_mm3_per_liter[i], pct,
+            paste(top_names, collapse = ", "))
+  }, character(1))
+
+  paste0(
+    "\n", heading, "\n",
+    paste(group_lines, collapse = "\n")
+  )
+}
+
 #' Format station data as a text summary for the LLM prompt
 #'
 #' @param station_data Data frame with station_summary rows for one visit.
 #' @param taxa_lookup Optional taxa lookup with \code{HAB} and
 #'   \code{warning_level} columns.
+#' @param phyto_groups Optional phytoplankton group table used to provide
+#'   explicit group assignments in the prompt text.
 #' @return Character string describing the station data.
 #' @keywords internal
 format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL,
-                                           unclassified_pct = NULL) {
+                                           unclassified_pct = NULL,
+                                           phyto_groups = NULL) {
+  station_data$.row_id_tmp <- seq_len(nrow(station_data))
+  station_data <- attach_text_groups(station_data, phyto_groups)
   station_name <- station_data$STATION_NAME_SHORT[1]
   full_name <- station_data$STATION_NAME[1]
   coast <- station_data$COAST[1]
@@ -318,6 +452,16 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL,
   }
   station_data$display_name <- make_display(station_data)
   top_taxa$display_name <- station_data$display_name[seq_len(nrow(top_taxa))]
+  dominant_group_block <- build_station_group_summary(
+    station_data,
+    group_col = "detailed_group",
+    heading = "Provided dominant-group assignments for text (use these exact groups for the Dominant groups section; do not infer group membership from scientific names):"
+  )
+  key_species_group_block <- build_station_group_summary(
+    station_data,
+    group_col = "text_group",
+    heading = "Provided four-group assignments for the Key species by group section:"
+  )
 
   # Identify HAB species (using display names)
   hab_species <- character(0)
@@ -425,6 +569,8 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL,
     if (nzchar(chl_info)) paste0(chl_info, "\n") else "",
     "\nTop taxa by biovolume:\n",
     paste(taxa_lines, collapse = "\n"),
+    dominant_group_block,
+    key_species_group_block,
     hab_extra,
     warning_note,
     unclass_note
@@ -436,10 +582,15 @@ format_station_data_for_prompt <- function(station_data, taxa_lookup = NULL,
 #' @param station_summary Full station_summary data frame.
 #' @param taxa_lookup Optional taxa lookup with \code{HAB} and
 #'   \code{warning_level} columns.
+#' @param phyto_groups Optional phytoplankton group table used to provide
+#'   explicit group assignments in the prompt text.
 #' @return Character string with cruise-level overview.
 #' @keywords internal
 format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL,
-                                              unclassified_fractions = NULL) {
+                                             unclassified_fractions = NULL,
+                                             phyto_groups = NULL) {
+  station_summary$.row_id_tmp <- seq_len(nrow(station_summary))
+  station_summary <- attach_text_groups(station_summary, phyto_groups)
   visits <- unique(station_summary[, c("STATION_NAME_SHORT", "COAST",
                                         "visit_date", "visit_id")])
   visits <- visits[order(visits$COAST, visits$visit_date), ]
@@ -518,6 +669,30 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
       ""
     }
 
+    summarize_groups <- function(group_col, label) {
+      group_totals <- stats::aggregate(
+        biovolume_mm3_per_liter ~ group,
+        data = data.frame(
+          group = sdata[[group_col]],
+          biovolume_mm3_per_liter = sdata$biovolume_mm3_per_liter
+        ),
+        FUN = sum,
+        na.rm = TRUE
+      )
+      group_totals <- group_totals[group_totals$biovolume_mm3_per_liter > 0, ,
+                                   drop = FALSE]
+      group_totals <- group_totals[order(-group_totals$biovolume_mm3_per_liter), ,
+                                   drop = FALSE]
+      if (nrow(group_totals) == 0) return("")
+      paste0(" | ", label, ": ",
+             paste(sprintf("%s %.3f mm3/L",
+                           group_totals$group,
+                           group_totals$biovolume_mm3_per_liter),
+                   collapse = ", "))
+    }
+    dominant_group_note <- summarize_groups("detailed_group", "Dominant groups")
+    key_species_group_note <- summarize_groups("text_group", "Key-species groups")
+
     # Chlorophyll
     chl_note <- ""
     if ("chl_mean" %in% names(sdata) && !all(is.na(sdata$chl_mean))) {
@@ -538,11 +713,12 @@ format_cruise_summary_for_prompt <- function(station_summary, taxa_lookup = NULL
       }
     }
 
-    sprintf("  %s (%s, %s): %d taxa, %.0f counts/L, %.4f mm3/L biovol, %.2f ug/L carbon | Top: %s%s%s%s%s",
+    sprintf("  %s (%s, %s): %d taxa, %.0f counts/L, %.4f mm3/L biovol, %.2f ug/L carbon | Top: %s%s%s%s%s%s%s",
             v$STATION_NAME_SHORT, region, v$visit_date,
             n_taxa, total_counts, total_bv, total_carbon,
             paste(top_names, collapse = ", "),
-            hab_note, warn_note, chl_note, unclass_note)
+            hab_note, warn_note, dominant_group_note, key_species_group_note,
+            chl_note, unclass_note)
   }, character(1))
 
   # Add a cruise-level warning summary block so the LLM sees all exceedances
@@ -749,17 +925,21 @@ strip_markdown <- function(text) {
 #' @param station_summary Full station_summary data frame.
 #' @param taxa_lookup Optional taxa lookup table.
 #' @param cruise_info Cruise info string.
+#' @param phyto_groups Optional phytoplankton group table used to provide
+#'   explicit group assignments in the prompt text.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
 #' @param unclassified_fractions Optional per-sample fractions of unclassified detections supplied to the prompt.
 #' @return Character string with Swedish summary.
 #' @export
 generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "", provider = NULL,
+                                     cruise_info = "", phyto_groups = NULL,
+                                     provider = NULL,
                                      unclassified_fractions = NULL) {
   guide <- load_writing_guide()
   cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup,
-                                                   unclassified_fractions = unclassified_fractions)
+                                                  unclassified_fractions = unclassified_fractions,
+                                                  phyto_groups = phyto_groups)
 
   system_prompt <- paste0(
     "You are a marine biologist writing phytoplankton monitoring reports ",
@@ -786,6 +966,8 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
     "'v\u00e4xtplankton' (not 'fytoplankton'), ",
     "'expedition' (not 'kryssningen'), ",
     "'kryptomonader' (not 'kryptofyter'). ",
+    "Use the provided phytoplankton group assignments in the prompt data. ",
+    "Do not infer group membership from scientific names yourself. ",
     "Compare klorofyllfluorescens between stations and relate it to the ",
     "IFCB biovolume data where relevant. ",
     "If any station data lines contain 'WARNING EXCEEDED', you MUST explicitly ",
@@ -805,6 +987,8 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param station_summary Full station_summary data frame.
 #' @param taxa_lookup Optional taxa lookup table.
 #' @param cruise_info Cruise info string.
+#' @param phyto_groups Optional phytoplankton group table used to provide
+#'   explicit group assignments in the prompt text.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
 #' @param unclassified_fractions Optional per-sample unclassified percentages
@@ -812,11 +996,13 @@ generate_swedish_summary <- function(station_summary, taxa_lookup = NULL,
 #' @return Character string with English summary.
 #' @export
 generate_english_summary <- function(station_summary, taxa_lookup = NULL,
-                                     cruise_info = "", provider = NULL,
+                                     cruise_info = "", phyto_groups = NULL,
+                                     provider = NULL,
                                      unclassified_fractions = NULL) {
   guide <- load_writing_guide()
   cruise_data <- format_cruise_summary_for_prompt(station_summary, taxa_lookup,
-                                                   unclassified_fractions = unclassified_fractions)
+                                                  unclassified_fractions = unclassified_fractions,
+                                                  phyto_groups = phyto_groups)
 
   system_prompt <- paste0(
     "You are a marine biologist writing phytoplankton monitoring reports ",
@@ -831,6 +1017,8 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
     "Station data overview:\n", cruise_data, "\n\n",
     "Write in English. Follow the writing guide exactly, including the ",
     "harmful taxa terminology section. ",
+    "Use the provided phytoplankton group assignments in the prompt data. ",
+    "Do not infer group membership from scientific names yourself. ",
     "If any station data lines contain 'WARNING EXCEEDED', you MUST explicitly ",
     "state in the summary that the abundance of the named taxon exceeds the ",
     "recommended warning level at that station, and include the actual abundance ",
@@ -848,6 +1036,8 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
 #' @param station_data Data frame with station_summary rows for one visit.
 #' @param taxa_lookup Optional taxa lookup table.
 #' @param all_stations_summary Optional full station_summary for context.
+#' @param phyto_groups Optional phytoplankton group table used to provide
+#'   explicit group assignments in the prompt text.
 #' @param provider LLM provider (\code{"openai"} or \code{"gemini"}).
 #'   NULL auto-detects.
 #' @param unclassified_pct Optional per-class unclassified percentage info used for context.
@@ -855,11 +1045,13 @@ generate_english_summary <- function(station_summary, taxa_lookup = NULL,
 #' @export
 generate_station_description <- function(station_data, taxa_lookup = NULL,
                                          all_stations_summary = NULL,
+                                         phyto_groups = NULL,
                                          provider = NULL,
                                          unclassified_pct = NULL) {
   guide <- load_writing_guide()
   station_text <- format_station_data_for_prompt(station_data, taxa_lookup,
-                                                  unclassified_pct = unclassified_pct)
+                                                 unclassified_pct = unclassified_pct,
+                                                 phyto_groups = phyto_groups)
 
   # Provide cruise-wide context so the LLM can make relative statements
   context <- ""
@@ -901,6 +1093,8 @@ generate_station_description <- function(station_data, taxa_lookup = NULL,
     "Base your characterization of diversity (high/moderate/low) and abundance ",
     "(high/moderate/low) on the cruise context data above -- describe this station ",
     "relative to the other stations visited during this cruise. ",
+    "Use the provided phytoplankton group assignments in the prompt data. ",
+    "Do not infer group membership from scientific names yourself. ",
     "Taxa marked [HAB] in the data are potentially harmful and must be mentioned. ",
     "If the station data contains an IMPORTANT section about taxa exceeding warning ",
     "levels, you MUST state in the description the actual abundance in cells/L and ",
