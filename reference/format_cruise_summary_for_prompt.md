@@ -23,6 +23,11 @@ format_cruise_summary_for_prompt(
 
   Optional taxa lookup with `HAB` and `warning_level` columns.
 
+- unclassified_fractions:
+
+  Optional named list of per-visit unclassified percentages used to
+  annotate station lines.
+
 - phyto_groups:
 
   Optional phytoplankton group table used to provide explicit group

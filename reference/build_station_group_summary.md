@@ -23,6 +23,10 @@ build_station_group_summary(station_data, group_col, heading, n_top = NULL)
 
   Heading line for the block.
 
+- n_top:
+
+  Optional integer: limit to the top N groups.
+
 ## Value
 
 Character string.

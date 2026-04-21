@@ -43,6 +43,10 @@ place_pie_labels(
 
   Estimated label half-height in latitude degrees.
 
+- radius_mults:
+
+  Candidate radial distances in units of pie radius.
+
 ## Value
 
 `wide` with columns `label_x`, `label_y`, `hjust`, and `vjust` appended.

@@ -23,6 +23,11 @@ format_station_data_for_prompt(
 
   Optional taxa lookup with `HAB` and `warning_level` columns.
 
+- unclassified_pct:
+
+  Optional numeric; percentage of unclassified detections at this
+  station, used for context notes.
+
 - phyto_groups:
 
   Optional phytoplankton group table used to provide explicit group
